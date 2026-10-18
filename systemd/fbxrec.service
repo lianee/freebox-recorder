@@ -1,0 +1,18 @@
+[Unit]
+Description=fbxrec TV recorder (scheduler + LAN web UI)
+After=network-online.target remote-fs.target
+Wants=network-online.target
+
+[Service]
+# install.sh adds a drop-in when the Freebox disk belongs to another user
+User=freebox
+Environment=PYTHONUNBUFFERED=1
+# FBXREC_OUT (required), FBXREC_PORT...: written by install.sh
+EnvironmentFile=/etc/fbxrec.env
+WorkingDirectory=/opt/fbxrec
+ExecStart=/usr/bin/python3 -m fbxrec.app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

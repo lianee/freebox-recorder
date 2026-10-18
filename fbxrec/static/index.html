@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enregistreur TV</title>
+<style>
+:root { --bg:#f6f7f9; --card:#fff; --fg:#1d232b; --muted:#667085; --line:#e3e6ea; --accent:#c8102e; --ok:#1a7f37; --warn:#b54708; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171c; --card:#1d2128; --fg:#e7eaee; --muted:#98a2b3; --line:#2c323b; --accent:#ff5c6c; --ok:#4cc26b; --warn:#f0a050; } }
+* { box-sizing:border-box; }
+body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+main { max-width:960px; margin:0 auto; padding:16px; }
+h1 { font-size:22px; margin:8px 0 16px; }
+h2 { font-size:16px; margin:0 0 10px; }
+section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px; }
+table { width:100%; border-collapse:collapse; }
+th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:600; font-size:13px; }
+.muted { color:var(--muted); }
+.ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--accent); }
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px; }
+label { display:block; font-size:13px; color:var(--muted); }
+input, select, button { font:inherit; color:inherit; }
+input, select { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); }
+.days label { display:inline-flex; align-items:center; gap:4px; margin-right:10px; color:var(--fg); font-size:14px; }
+.days input { width:auto; }
+button { padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
+button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.row-actions button { margin-right:6px; }
+#msg, .msg { min-height:1.4em; margin-top:8px; }
+h3 { font-size:15px; margin:18px 0 6px; }
+pre { white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
+.scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>Enregistreur TV</h1>
+
+<section>
+  <h2 id="form-title">Nouvelle programmation</h2>
+  <div class="grid">
+    <div><label>Nom (dossier)</label><input id="f-name" maxlength="60" placeholder="Journal de 20h"></div>
+    <div><label>Chaîne</label><select id="f-service"></select></div>
+    <div><label>Qualité</label><select id="f-flavour"><option value="sd">SD</option><option value="hd">HD</option></select></div>
+    <div><label>Type</label><select id="f-kind"><option value="weekly">Récurrent</option><option value="once">Ponctuel</option></select></div>
+    <div id="w-date"><label>Date</label><input id="f-date" type="date"></div>
+    <div><label>Début de l'émission</label><input id="f-start" type="time"></div>
+    <div><label>Fin de l'émission</label><input id="f-end" type="time"></div>
+    <div><label>Marge avant (min)</label><input id="f-mb" type="number" min="0" max="60" value="5"></div>
+    <div><label>Marge après (min)</label><input id="f-ma" type="number" min="0" max="60" value="5"></div>
+  </div>
+  <div id="w-days" class="days" style="margin-top:10px"></div>
+  <div style="margin-top:12px">
+    <button class="primary" id="save">Enregistrer</button>
+    <button id="cancel" hidden>Annuler la modification</button>
+  </div>
+  <div id="msg"></div>
+</section>
+
+<section><h2>Programmations</h2><div class="scroll"><table id="t-sched"></table></div></section>
+<section><h2>En cours</h2><div class="scroll"><table id="t-running"></table></div></section>
+<section><h2>Prochains enregistrements</h2><div class="scroll"><table id="t-upcoming"></table></div></section>
+<section><h2>Derniers enregistrements</h2><div class="scroll"><table id="t-results"></table></div></section>
+
+<section id="settings">
+  <h2>Paramètres</h2>
+  <div id="s-info" class="muted"></div>
+
+  <h3>Mot de passe</h3>
+  <div id="s-pw-state"></div>
+  <div class="grid" style="margin-top:8px">
+    <div><label>Nouveau mot de passe</label><input id="s-pw1" type="password" autocomplete="new-password" placeholder="8 caractères minimum"></div>
+    <div><label>Confirmation</label><input id="s-pw2" type="password" autocomplete="new-password"></div>
+  </div>
+  <div style="margin-top:10px">
+    <button class="primary" id="s-pw-set">Enregistrer le mot de passe</button>
+    <button id="s-pw-del" hidden>Supprimer le mot de passe</button>
+  </div>
+  <div id="s-pw-msg" class="msg"></div>
+
+  <h3>Mise à jour</h3>
+  <div id="s-up-state"></div>
+  <div style="margin-top:10px">
+    <button id="s-up-check">Vérifier</button>
+    <button class="primary" id="s-up-go" hidden>Mettre à jour</button>
+  </div>
+  <div id="s-up-msg" class="msg"></div>
+  <pre id="s-up-log" class="muted" hidden></pre>
+
+  <h3>Système</h3>
+  <div id="s-sys-state"></div>
+  <div style="margin-top:10px"><button class="primary" id="s-reboot" hidden>Redémarrer la VM</button></div>
+  <div id="s-sys-msg" class="msg"></div>
+</section>
+</main>
+<script>
+const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const $ = id => document.getElementById(id);
+let editing = null, channels = [];
+
+$("w-days").innerHTML = DAYS.map((d, i) => `<label><input type="checkbox" value="${i}">${d}</label>`).join("");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = iso => new Date(iso).toLocaleString("fr-FR", {weekday:"short", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+const size = b => b == null ? "" : (b / 1073741824).toFixed(2) + " Go";
+
+async function api(method, path, body) {
+  const r = await fetch(path, {method, headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.status);
+  return data;
+}
+
+function syncKind() {
+  const once = $("f-kind").value === "once";
+  $("w-date").hidden = !once; $("w-days").hidden = once;
+}
+$("f-kind").onchange = syncKind;
+
+function resetForm() {
+  editing = null; $("form-title").textContent = "Nouvelle programmation"; $("cancel").hidden = true;
+  $("f-name").value = ""; $("f-date").value = ""; $("f-start").value = ""; $("f-end").value = "";
+  $("f-mb").value = 5; $("f-ma").value = 5; $("f-kind").value = "weekly"; $("f-flavour").value = "sd";
+  document.querySelectorAll("#w-days input").forEach(c => c.checked = false); syncKind();
+}
+$("cancel").onclick = resetForm;
+
+function edit(s) {
+  editing = s; $("form-title").textContent = "Modifier : " + s.name; $("cancel").hidden = false;
+  $("f-name").value = s.name; $("f-service").value = s.service; $("f-flavour").value = s.flavour;
+  $("f-kind").value = s.kind; $("f-date").value = s.date || ""; $("f-start").value = s.start; $("f-end").value = s.end;
+  $("f-mb").value = s.margin_before; $("f-ma").value = s.margin_after;
+  document.querySelectorAll("#w-days input").forEach(c => c.checked = (s.days || []).includes(+c.value));
+  syncKind(); window.scrollTo({top: 0, behavior: "smooth"});
+}
+
+$("save").onclick = async () => {
+  const ch = channels.find(c => c.service === +$("f-service").value);
+  const s = {
+    name: $("f-name").value.trim(), service: +$("f-service").value, channel: ch ? ch.name : String($("f-service").value),
+    flavour: $("f-flavour").value, kind: $("f-kind").value, start: $("f-start").value, end: $("f-end").value,
+    margin_before: parseInt($("f-mb").value, 10), margin_after: parseInt($("f-ma").value, 10),
+    enabled: editing ? editing.enabled : true,
+  };
+  if (editing) s.id = editing.id;
+  if (s.kind === "once") s.date = $("f-date").value;
+  else s.days = [...document.querySelectorAll("#w-days input:checked")].map(c => +c.value);
+  try { await api("POST", "/api/schedules", s); $("msg").innerHTML = `<span class="ok">Programmation enregistrée.</span>`; resetForm(); refresh(); }
+  catch (e) { $("msg").innerHTML = `<span class="bad">Refusé : ${esc(e.message)}</span>`; }
+};
+
+function when(s) {
+  const t = `${s.start} à ${s.end}` + (s.end < s.start ? " (lendemain)" : "");
+  if (s.kind === "once") return `${new Date(s.date + "T12:00").toLocaleDateString("fr-FR", {weekday:"long", day:"numeric", month:"long"})}, ${t}`;
+  return (s.days.length === 7 ? "Tous les jours" : s.days.map(d => DAYS[d]).join(" ")) + ", " + t;
+}
+
+async function refresh() {
+  const [sched, up, run, res] = await Promise.all(["schedules", "upcoming", "running", "results"].map(p => api("GET", "/api/" + p)));
+  $("t-sched").innerHTML = "<tr><th>Nom</th><th>Chaîne</th><th>Quand</th><th>Marges</th><th></th></tr>" + (sched.length ? sched.map(s => `
+    <tr class="${s.enabled ? "" : "muted"}"><td>${esc(s.name)}</td><td>${esc(s.channel)} (${s.flavour.toUpperCase()})</td>
+    <td>${esc(when(s))}</td><td>-${s.margin_before} / +${s.margin_after} min</td>
+    <td class="row-actions"><button data-a="edit" data-id="${s.id}">Modifier</button><button data-a="toggle" data-id="${s.id}">${s.enabled ? "Suspendre" : "Réactiver"}</button><button data-a="del" data-id="${s.id}">Supprimer</button></td></tr>`).join("")
+    : `<tr><td colspan="5" class="muted">Aucune programmation.</td></tr>`);
+  $("t-sched").onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const s = sched.find(x => x.id === b.dataset.id);
+    if (b.dataset.a === "edit") return edit(s);
+    if (b.dataset.a === "toggle") await api("POST", "/api/schedules", {...s, enabled: !s.enabled});
+    if (b.dataset.a === "del" && confirm(`Supprimer la programmation « ${s.name} » ? Les fichiers déjà enregistrés sont conservés.`)) await api("DELETE", "/api/schedules/" + s.id);
+    refresh();
+  };
+  $("t-running").innerHTML = run.length ? "<tr><th>Nom</th><th>Jusqu'à</th><th>Coupures</th><th></th></tr>" + run.map(r => `
+    <tr><td>${esc(r.name)}</td><td>${fmt(r.end)}</td><td>${r.reconnects}</td><td><button data-key="${esc(r.key)}">Arrêter</button></td></tr>`).join("")
+    : `<tr><td class="muted">Aucun enregistrement en cours.</td></tr>`;
+  $("t-running").onclick = async e => {
+    const b = e.target.closest("button"); if (!b || !confirm("Arrêter cet enregistrement ? Ce qui est déjà capturé est conservé.")) return;
+    await api("POST", "/api/running/stop", {key: b.dataset.key}); setTimeout(refresh, 1500);
+  };
+  $("t-upcoming").innerHTML = up.length ? "<tr><th>Nom</th><th>Début (marge comprise)</th><th>Fin</th></tr>" + up.slice(0, 10).map(o => `
+    <tr><td>${esc(o.name)}</td><td>${fmt(o.start)}</td><td>${fmt(o.end)}</td></tr>`).join("")
+    : `<tr><td class="muted">Rien de prévu.</td></tr>`;
+  $("t-results").innerHTML = res.length ? "<tr><th>Nom</th><th>Émission</th><th>État</th><th>Taille</th><th>Pertes</th></tr>" + res.map(r => {
+    const bad = r.state !== "done" || r.gaps || r.reconnects || r.missed;
+    const loss = r.gaps == null ? "non mesuré" : (r.gaps ? `${r.gaps} trous, ${r.missing_s} s` : "aucune") + (r.reconnects ? `, ${r.reconnects} coupure(s)` : "");
+    const st = {done: "terminé", stopped: "arrêté", failed: "échec"}[r.state] || r.state;
+    return `<tr><td>${esc(r.name)}</td><td>${fmt(r.show_start)}</td><td class="${r.state === "failed" ? "bad" : ""}">${st}</td><td>${size(r.size)}</td><td class="${bad ? "warn" : "ok"}">${esc(loss)}</td></tr>`;
+  }).join("") : `<tr><td class="muted">Aucun enregistrement terminé.</td></tr>`;
+}
+
+async function loadSettings() {
+  const s = await api("GET", "/api/settings");
+  const disk = s.disk.error ? `disque inaccessible (${esc(s.disk.error)})`
+    : `${size(s.disk.free)} libres sur ${size(s.disk.total)}`;
+  $("s-info").innerHTML = `Version ${esc(s.version)}. Enregistrements dans <code>${esc(s.out)}</code>, ${disk}.`;
+  $("s-pw-state").innerHTML = s.password === true ? `<span class="ok">Protégé par un mot de passe.</span>`
+    : s.password === "invalid" ? `<span class="bad">Fichier de mot de passe illisible : enregistrez-en un nouveau.</span>`
+    : `<span class="warn">Pas de mot de passe : tout appareil du réseau local peut modifier les programmations.</span>`;
+  $("s-pw-set").textContent = s.password === true ? "Changer le mot de passe" : "Enregistrer le mot de passe";
+  $("s-pw-del").hidden = s.password !== true;
+  $("s-up-check").hidden = !s.update_allowed;
+  $("s-up-state").innerHTML = s.update_allowed ? "" : `<span class="muted">Mise à jour depuis la page indisponible sur cette VM : dans un terminal, <code>sudo fbxrec-update</code>.</span>`;
+  $("s-sys-state").innerHTML = s.reboot_required === null
+    ? `<span class="muted">Les mises à jour de sécurité de Debian s'installent toutes seules chaque jour. Aucun redémarrage nécessaire.</span>`
+    : `<span class="warn">Redémarrage nécessaire pour terminer des mises à jour${s.reboot_required.length ? " (" + esc(s.reboot_required.join(", ")) + ")" : ""}.</span>`
+      + (s.reboot_allowed ? "" : ` <span class="muted">Dans un terminal : <code>sudo reboot</code>.</span>`);
+  $("s-reboot").hidden = !(s.reboot_required !== null && s.reboot_allowed);
+  $("s-up-log").hidden = !s.update_log.length;
+  $("s-up-log").textContent = s.update_log.length ? "Dernière mise à jour :\n" + s.update_log.join("") : "";
+}
+
+$("s-pw-set").onclick = async () => {
+  const a = $("s-pw1").value, b = $("s-pw2").value;
+  if (a !== b) { $("s-pw-msg").innerHTML = `<span class="bad">Les deux saisies diffèrent.</span>`; return; }
+  try {
+    await api("POST", "/api/settings/password", {password: a});
+    $("s-pw1").value = $("s-pw2").value = "";
+    $("s-pw-msg").innerHTML = `<span class="ok">Mot de passe enregistré. Le navigateur va vous le demander (l'identifiant n'a pas d'importance).</span>`;
+    setTimeout(() => location.reload(), 2500);
+  } catch (e) { $("s-pw-msg").innerHTML = `<span class="bad">Refusé : ${esc(e.message)}</span>`; }
+};
+
+$("s-pw-del").onclick = async () => {
+  if (!confirm("Supprimer le mot de passe ? Tout appareil du réseau local pourra modifier les programmations.")) return;
+  await api("DELETE", "/api/settings/password");
+  $("s-pw-msg").innerHTML = `<span class="ok">Mot de passe supprimé.</span>`; loadSettings();
+};
+
+$("s-up-check").onclick = async () => {
+  $("s-up-msg").textContent = "Vérification...";
+  try {
+    const u = await api("GET", "/api/update");
+    $("s-up-go").hidden = !u.newer;
+    $("s-up-msg").innerHTML = !u.latest ? "Aucune version publiée pour l'instant."
+      : u.newer ? `Nouvelle version ${esc(u.latest)} disponible (installée : ${esc(u.current)}).`
+      : `<span class="ok">À jour (${esc(u.current)}).</span>`;
+  } catch (e) { $("s-up-msg").innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+};
+
+$("s-up-go").onclick = async () => {
+  if (!confirm("Installer la mise à jour ? Le service redémarre (environ 2 minutes), aucun enregistrement n'est coupé : la mise à jour refuse s'il y en a un en cours.")) return;
+  try {
+    await api("POST", "/api/update", {});
+    $("s-up-go").hidden = true;
+    $("s-up-msg").textContent = "Mise à jour lancée : tests puis redémarrage, la page se rechargera.";
+    const v0 = (await api("GET", "/api/settings")).version;
+    const t = setInterval(async () => {
+      try { const s = await api("GET", "/api/settings"); if (s.version !== v0) { clearInterval(t); location.reload(); } else loadSettings(); }
+      catch (e) { /* service restarting */ }
+    }, 5000);
+  } catch (e) { $("s-up-msg").innerHTML = `<span class="bad">Refusé : ${esc(e.message)}</span>`; }
+};
+
+$("s-reboot").onclick = async () => {
+  if (!confirm("Redémarrer la VM ? L'interface sera indisponible environ une minute. Refusé si un enregistrement est en cours ou commence bientôt.")) return;
+  try {
+    await api("POST", "/api/reboot", {});
+    $("s-reboot").hidden = true;
+    $("s-sys-msg").textContent = "Redémarrage en cours, la page se rechargera.";
+    setTimeout(() => {
+      const t = setInterval(async () => {
+        try { await api("GET", "/api/settings"); clearInterval(t); location.reload(); } catch (e) { /* still down */ }
+      }, 5000);
+    }, 15000);
+  } catch (e) { $("s-sys-msg").innerHTML = `<span class="bad">Refusé : ${esc(e.message)}</span>`; }
+};
+
+(async () => {
+  loadSettings();
+  channels = await api("GET", "/api/channels");
+  $("f-service").innerHTML = channels.length
+    ? channels.map(c => `<option value="${c.service}">${c.number} - ${esc(c.name)}</option>`).join("")
+    : `<option value="201">2 - France 2</option>`;
+  if (channels.some(c => c.service === 201)) $("f-service").value = 201;
+  resetForm(); refresh(); setInterval(refresh, 30000);
+})();
+</script>
+</body>
+</html>
