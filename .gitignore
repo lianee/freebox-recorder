@@ -1,0 +1,6 @@
+node_modules/
+*.ts
+*.mpd
+secrets/
+__pycache__/
+*.pyc
