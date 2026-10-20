@@ -59,6 +59,10 @@ la vidéo) et le résultat est affiché dans la page.
      - curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | bash > /var/log/fbxrec-install.log 2>&1
    ```
 
+   Cliquez ensuite sur **Appliquer** pour que la modification soit prise en compte.
+
+   <!-- TODO capture d'écran de l'étape cloud-init, ligne ajoutée et bouton Appliquer -->
+
    À faire **avant le premier démarrage** : cloud-init ne s'exécute qu'une fois. Si vous
    l'avez oublié, voir « Installation sur une VM existante ».
 
