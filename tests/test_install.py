@@ -187,6 +187,20 @@ exit 32
         with open(log) as f:
             self.assertTrue(f.read().startswith("update"))
 
+    def test_selftest(self):
+        out = os.path.join(self.tmp.name, "out")
+        os.mkdir(out)
+        self.fake("sudo", 'shift 2; exec "$@"\n')     # sudo -u USER cmd...
+        self.fake("timeout", 'shift; exec "$@"\n')
+        self.fake("ffmpeg", 'for a; do last=$a; done; head -c 200000 /dev/zero > "$last"\n')
+        rc, _, err = self.sh(f'selftest me "{out}"')
+        self.assertIn("contrôle OK : 195 Ko", err)
+        self.assertEqual(os.listdir(out), [], "test file removed")
+        self.fake("ffmpeg", "exit 1\n")                 # no stream: warn, do not abort
+        rc, _, err = self.sh(f'selftest me "{out}" && echo continued')
+        self.assertIn("ATTENTION", err)
+        self.assertEqual(rc, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

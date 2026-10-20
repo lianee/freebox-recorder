@@ -260,6 +260,24 @@ EOF
   chmod 755 $1/fbxrec-update $1/fbxrec-password
 }
 
+# selftest USER OUT: a real 5 s capture of France 2 written where recordings go, as the
+# service user. Proves the TV stream, ffmpeg and the Freebox disk together. Warns only:
+# the recorder is installed either way.
+SELFTEST_URL="rtsp://mafreebox.freebox.fr/fbxtv_pub/stream?namespace=1&service=201&flavour=sd"
+selftest() {
+  local user=$1 t="$2/.fbxrec-selftest.ts" size
+  say "contrôle : capture de 5 s de France 2 vers le disque Freebox..."
+  sudo -u "$user" timeout 40 ffmpeg -nostdin -v error -rtsp_transport udp -i "$SELFTEST_URL" \
+    -map 0:v:0 -map "0:a:m:language:fra" -t 5 -c copy -f mpegts -y "$t" >/dev/null 2>&1 || true
+  size=$(stat -c %s "$t" 2>/dev/null || echo 0)
+  rm -f "$t"
+  if [ "$size" -gt 100000 ]; then
+    say "contrôle OK : $((size / 1024)) Ko enregistrés"
+  else
+    say "ATTENTION : le contrôle n'a rien enregistré ($size octets). Vérifiez le disque de la Freebox et la réception TV."
+  fi
+}
+
 install_from() {
   local src=$1 user out
   install_packages
@@ -301,6 +319,7 @@ install_from() {
   port=$(sed -n 's/^FBXREC_PORT=//p' "$ENV_FILE"); port=${port:-8080}
   curl -s -o /dev/null -m 10 -H "Host: localhost:$port" "http://localhost:$port/" \
     || die "le service tourne mais ne répond pas sur le port $port"
+  selftest "$user" "$out"
   ip=$(hostname -I | awk '{print $1}')
   say "OK, interface web : http://$ip:$port/ (installation terminée en $(elapsed))"
   if [ ! -f "$DATA_DIR/password" ]; then
