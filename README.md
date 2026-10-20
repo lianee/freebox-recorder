@@ -81,16 +81,16 @@ la vidéo) et le résultat est affiché dans la page.
 5. Démarrez la VM. Elle s'installe toute seule : environ 2 minutes sur Ultra, 10 minutes sur
    Delta.
 6. La Freebox donne automatiquement une adresse à la VM : vous la retrouvez dans Freebox OS
-   (fenêtre VMs, ou liste des appareils du réseau). Elle change rarement, mais elle peut
-   changer, par exemple après une longue extinction.
+   (fenêtre VMs, sous le nom de la VM). Elle change rarement, mais elle peut changer, par
+   exemple après une longue extinction.
+
+   ![VM allumée, son adresse sous son nom](docs/img/05-vm-creee.png)
 
    Facultatif, si vous gardez la page en favori : fixez cette adresse dans la fenêtre VMs,
    menu **Réseau > Configurer un bail DHCP**. Choisissez une adresse **en dehors** de la
    plage distribuée automatiquement, sinon un autre appareil peut déjà l'occuper, et deux
    appareils sur la même adresse coupent les enregistrements. Redémarrez ensuite la VM
    pour qu'elle la prenne.
-
-   ![La VM créée, menu Réseau en haut](docs/img/05-vm-creee.png)
 
    ![Menu Réseau > Configurer un bail DHCP](docs/img/06-bail-dhcp.png)
 
