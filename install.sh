@@ -234,7 +234,7 @@ service_user() {
 
 run_tests() {
   local log=/tmp/fbxrec-tests.log
-  say "tests..."
+  say "tests... (environ 30 s)"
   if ! (cd "$1" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -t . > "$log" 2>&1); then
     grep -A20 "^FAIL:\|^ERROR:" "$log" | head -60 >&2
     die "les tests échouent sur cette machine, rien n'est installé (journal : $log)"
