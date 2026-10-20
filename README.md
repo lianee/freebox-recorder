@@ -69,7 +69,8 @@ la vidéo) et le résultat est affiché dans la page.
 
    ![Taille du disque](docs/img/04-taille-disque.png)
 
-5. Démarrez la VM. Elle s'installe toute seule : quelques minutes sur Ultra, plus sur Delta.
+5. Démarrez la VM. Elle s'installe toute seule : environ 3 minutes sur Ultra, 10 minutes sur
+   Delta.
 6. Donnez-lui une adresse fixe : dans la fenêtre VMs, menu **Réseau > Configurer un bail
    DHCP**, choisissez une adresse en dehors de la plage distribuée automatiquement. Sinon
    son adresse peut changer, et deux appareils sur la même adresse coupent les
