@@ -42,10 +42,18 @@ la vidéo) et le résultat est affiché dans la page.
    - Cochez **Accès aux disques Freebox** (Ultra comme Delta) : Freebox OS ajoute alors au
      cloud-init le montage du disque de la Freebox, avec le bon nom selon le modèle.
 
-   ![Système, utilisateur et accès aux disques](docs/img/03-systeme-disques.png)
+   ![Système, utilisateur, mot de passe et accès aux disques](docs/img/03-systeme-disques.png)
 
-3. Freebox OS affiche ensuite le cloud-init qu'il a préparé. Ne changez rien, ajoutez
-   seulement **une ligne à la fin**, sous `- mount -a`, avec les mêmes 2 espaces devant :
+3. Taille du disque : le minimum proposé (10 Go) convient. Les enregistrements ne sont pas
+   stockés sur le disque de la VM mais sur celui de la Freebox. Cliquez sur **Terminer** :
+   la VM est créée, **ne la démarrez pas encore**.
+
+   ![Taille du disque](docs/img/04-taille-disque.png)
+
+4. Dans la fenêtre VMs, sélectionnez la nouvelle VM : ses propriétés s'affichent. Dans la
+   section **Pré-configuration**, la zone **cloud-init user-data** contient ce que Freebox OS
+   a préparé. Ne changez rien, ajoutez seulement **une ligne à la fin**, sous `- mount -a`,
+   avec les mêmes 2 espaces devant :
 
    ```yaml
      - curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | bash > /var/log/fbxrec-install.log 2>&1
@@ -61,20 +69,16 @@ la vidéo) et le résultat est affiché dans la page.
 
    Cliquez ensuite sur **Appliquer** pour que la modification soit prise en compte.
 
-   <!-- TODO capture d'écran de l'étape cloud-init, ligne ajoutée et bouton Appliquer -->
+   ![Cloud-init avec la ligne ajoutée, bouton Appliquer](docs/img/03b-cloud-init.png)
 
-   À faire **avant le premier démarrage** : cloud-init ne s'exécute qu'une fois. Si vous
-   l'avez oublié, voir « Installation sur une VM existante ».
+   À faire **avant le premier démarrage** : cloud-init ne s'exécute qu'au premier
+   démarrage. Si vous l'avez oublié, voir « Installation sur une VM existante ».
 
    Freebox OS y écrit aussi `ssh_pwauth: True` : la connexion SSH par mot de passe est
    ouverte depuis le réseau local. Remplacez `True` par `False` si seule la Console de
    Freebox OS vous suffit.
-4. Taille du disque : le minimum proposé (10 Go) convient. Les enregistrements ne sont pas
-   stockés sur le disque de la VM mais sur celui de la Freebox.
 
-   ![Taille du disque](docs/img/04-taille-disque.png)
-
-5. Démarrez la VM. Elle s'installe toute seule : environ 3 minutes sur Ultra, 10 minutes sur
+5. Démarrez la VM. Elle s'installe toute seule : environ 2 minutes sur Ultra, 10 minutes sur
    Delta.
 6. Donnez-lui une adresse fixe : dans la fenêtre VMs, menu **Réseau > Configurer un bail
    DHCP**, choisissez une adresse en dehors de la plage distribuée automatiquement. Sinon
