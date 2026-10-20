@@ -179,7 +179,7 @@ exit 32
             calls = f.read().splitlines()
         self.assertEqual(len(calls), 1, calls)
         self.assertIn("--no-install-recommends", calls[0])
-        self.assertIn("--force-unsafe-io", calls[0])
+        self.assertNotIn("--force-unsafe-io", calls[0])
         self.assertIn("ffmpeg", calls[0])
         os.remove(log)
         self.fake("find", "true\n")                                # stale lists: update first

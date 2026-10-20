@@ -147,12 +147,11 @@ install_packages() {
   if ! find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -newermt '-60 min' 2>/dev/null | grep -q .; then
     DEBIAN_FRONTEND=noninteractive apt-get update -q
   fi
-  # no "recommended" extras (about 65 packages ffmpeg does not need for stream copy), and no
-  # fsync per file: on the Delta the VM disk is a file on a hard drive, where packages took
-  # 9 min 20 (2026-10-20, Ultra on SSD: about 2). Worst case of a power cut meanwhile:
-  # recreate the VM.
+  # no "recommended" extras (about 65 packages ffmpeg does not need for stream copy). On the
+  # Delta, packages take about 9 min (2026-10-20): download 39 s, shared-mime-info 70 s, the
+  # rest spread over ~250 packages; --force-unsafe-io was tried and gained nothing measurable.
   DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
-    -o Dpkg::Options::=--force-unsafe-io -o Dpkg::Progress-Fancy=1 "${need[@]}"
+    -o Dpkg::Progress-Fancy=1 "${need[@]}"
 }
 
 # choose_disk: prints the mount point of the Freebox disk, mounting it (and adding it to
