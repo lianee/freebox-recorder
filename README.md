@@ -26,8 +26,8 @@ la vidéo) et le résultat est affiché dans la page.
 
    ![Fenêtre VMs de Freebox OS](docs/img/01-fenetre-vms.png)
 
-   - Nom : facultatif (par exemple `PVR`), il sert seulement à reconnaître la VM dans
-     Freebox OS.
+   - Nom : facultatif, vous pouvez le laisser vide. Il sert seulement à reconnaître la VM
+     dans Freebox OS.
    - **1 CPU et 512 Mo de RAM suffisent** (2 enregistrements simultanés testés : environ
      3 % du processeur, 110 Mo de mémoire). Le reste des ressources de la Freebox reste
      libre pour d'autres VM.
@@ -80,10 +80,15 @@ la vidéo) et le résultat est affiché dans la page.
 
 5. Démarrez la VM. Elle s'installe toute seule : environ 2 minutes sur Ultra, 10 minutes sur
    Delta.
-6. Donnez-lui une adresse fixe : dans la fenêtre VMs, menu **Réseau > Configurer un bail
-   DHCP**, choisissez une adresse en dehors de la plage distribuée automatiquement. Sinon
-   son adresse peut changer, et deux appareils sur la même adresse coupent les
-   enregistrements. Redémarrez la VM pour qu'elle la prenne.
+6. La Freebox donne automatiquement une adresse à la VM : vous la retrouvez dans Freebox OS
+   (fenêtre VMs, ou liste des appareils du réseau). Elle change rarement, mais elle peut
+   changer, par exemple après une longue extinction.
+
+   Facultatif, si vous gardez la page en favori : fixez cette adresse dans la fenêtre VMs,
+   menu **Réseau > Configurer un bail DHCP**. Choisissez une adresse **en dehors** de la
+   plage distribuée automatiquement, sinon un autre appareil peut déjà l'occuper, et deux
+   appareils sur la même adresse coupent les enregistrements. Redémarrez ensuite la VM
+   pour qu'elle la prenne.
 
    ![La VM créée, menu Réseau en haut](docs/img/05-vm-creee.png)
 
