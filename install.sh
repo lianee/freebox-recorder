@@ -143,8 +143,16 @@ install_packages() {
   done
   [ ${#need[@]} -eq 0 ] && return 0
   say "installation des paquets : ${need[*]} (quelques minutes, bien plus sur Freebox Delta)"
-  DEBIAN_FRONTEND=noninteractive apt-get update -q
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -q -o Dpkg::Progress-Fancy=1 "${need[@]}"
+  # cloud-init has usually just refreshed the package lists: skip a second update
+  if ! find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -newermt '-60 min' 2>/dev/null | grep -q .; then
+    DEBIAN_FRONTEND=noninteractive apt-get update -q
+  fi
+  # no "recommended" extras (about 65 packages ffmpeg does not need for stream copy), and no
+  # fsync per file: on the Delta the VM disk is a file on a hard drive, where packages took
+  # 9 min 20 (2026-10-20, Ultra on SSD: about 2). Worst case of a power cut meanwhile:
+  # recreate the VM.
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+    -o Dpkg::Options::=--force-unsafe-io -o Dpkg::Progress-Fancy=1 "${need[@]}"
 }
 
 # choose_disk: prints the mount point of the Freebox disk, mounting it (and adding it to

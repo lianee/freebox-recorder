@@ -156,7 +156,11 @@ class DaemonStep(unittest.TestCase):
             d.step()
             self.assertEqual(len(d.running), 1)          # not started twice
             rec = next(iter(d.running.values()))
-            time.sleep(1)
+            # stop once data has arrived: a fixed 1 s sleep lost the race against a slow
+            # ffmpeg start on a loaded machine (state "failed", nothing recorded, 2026-10-20)
+            part, deadline = rec.base + ".part0.ts", time.monotonic() + 15
+            while not (os.path.exists(part) and os.path.getsize(part)) and time.monotonic() < deadline:
+                time.sleep(0.05)
             rec.stop()
             rec.join(10)
             with open(d.results) as f:
