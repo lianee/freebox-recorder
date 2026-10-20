@@ -89,6 +89,7 @@ class Api(unittest.TestCase):
         self.assertEqual(st, 200)
         self.assertEqual((s["version"], s["password"], s["update_allowed"]), (__version__, False, True))
         self.assertGreater(s["disk"]["total"], 0)
+        self.assertEqual(s["repo"], "lianee/freebox-recorder")
 
     def test_password_lifecycle(self):
         for bad in ("court", 12345678, None, ["a" * 10], "x" * 201):

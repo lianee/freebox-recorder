@@ -11,23 +11,28 @@
 #
 # Environment (all optional):
 #   FBXREC_OUT      output folder; default "<Freebox disk>/Enregistrements TV", disk detected
-#   FBXREC_SHARE    Freebox disk share name to mount when none is mounted (Ultra: "interne")
+#   FBXREC_SHARE    Freebox disk share name to mount when none is mounted (Ultra: "interne", Delta: "Freebox")
 #   FBXREC_USER     service user; default the owner of the Freebox disk mount, else "freebox"
 #   FBXREC_REPO     GitHub "owner/name" releases come from
 #   FBXREC_TARBALL  URL or local path of a .tar.gz to install instead of the latest release
 #   FBXREC_VERSION  release tag to install instead of the latest
+#   FBXREC_BRANCH   branch to install instead of a release (test installs, e.g. master)
 #   FORCE=1         install even during a recording
 set -euo pipefail
 
 REPO=${FBXREC_REPO:-lianee/freebox-recorder}
 FBX_HOST=mafreebox.freebox.fr
-SHARE_CANDIDATES=("interne" "Disque dur" "Freebox")   # Ultra: interne; Delta: unverified
+SHARE_CANDIDATES=("interne" "Freebox" "Disque dur")   # Ultra: interne, Delta: Freebox (seen in its default cloud-init 2026-10-20)
 ENV_FILE=/etc/fbxrec.env
 APP_DIR=/opt/fbxrec
 DATA_DIR=/var/lib/fbxrec
 OUT_SUBDIR="Enregistrements TV"
 
-say() { echo "fbxrec: $*" >&2; }
+# elapsed time on every message; exported so the re-run after a download keeps counting
+FBXREC_T0=${FBXREC_T0:-$(date +%s)}
+export FBXREC_T0
+elapsed() { local e=$(( $(date +%s) - FBXREC_T0 )); printf '%d:%02d' $((e / 60)) $((e % 60)); }
+say() { echo "fbxrec [$(elapsed)]: $*" >&2; }
 die() { say "ERREUR : $*"; exit 1; }
 
 # ask PROMPT: reads one answer from the terminal, even under "curl | bash" (stdin is the script)
@@ -51,19 +56,35 @@ freebox_mounts() {
 # mount_point_for SHARE: /mnt/<share in lower case, spaces as dashes>
 mount_point_for() { local s=${1,,}; printf '/mnt/%s' "${s// /-}"; }
 
+# valid_share NAME: a bare share name (no path separator)
+valid_share() { [ -n "$1" ] && [[ "$1" != */* && "$1" != *\\* ]]; }
+
 # fstab_escape STRING: spaces as \040, the only special character in a share name here
 fstab_escape() { printf '%s' "${1// /\\040}"; }
 
+SMB_HINT="vérifiez dans Freebox OS (Paramètres de la Freebox > Partages Windows) que les partages sont activés, avec SMBv2/SMBv3 (pas activés d'office sur Delta)"
+
+# try_share SHARE: succeeds when the Freebox lets a guest mount SHARE, else prints the
+# first line of mount's error
+try_share() {
+  local tmp err rc=0
+  tmp=$(mktemp -d)
+  if err=$(mount -t cifs "//$FBX_HOST/$1" "$tmp" -o guest,ro 2>&1); then
+    umount "$tmp"
+  else
+    rc=1; printf '%s' "${err%%$'\n'*}"
+  fi
+  rmdir "$tmp"
+  return $rc
+}
+
 # probe_shares: candidate share names the Freebox accepts as guest, one per line
 probe_shares() {
-  local s tmp
-  tmp=$(mktemp -d)
+  local s
   for s in "${SHARE_CANDIDATES[@]}"; do
-    if mount -t cifs "//$FBX_HOST/$s" "$tmp" -o guest,ro 2>/dev/null; then
-      umount "$tmp"; printf '%s\n' "$s"
-    fi
+    try_share "$s" >/dev/null && printf '%s\n' "$s"
   done
-  rmdir "$tmp"
+  return 0
 }
 
 # recording_now: prints the running recordings (JSON) and succeeds when there is at least one
@@ -89,6 +110,12 @@ guard_idle() {
 # fetch DEST: download and unpack the release to install into DEST
 fetch() {
   local dest=$1 src=${FBXREC_TARBALL:-} tag
+  if [ -z "$src" ] && [ -n "${FBXREC_BRANCH:-}" ]; then
+    # development state of a branch instead of a release (test installs)
+    [[ "$FBXREC_BRANCH" =~ ^[A-Za-z0-9._-]+$ ]] || die "nom de branche invalide : $FBXREC_BRANCH"
+    src="https://github.com/$REPO/archive/refs/heads/$FBXREC_BRANCH.tar.gz"
+    say "téléchargement de la branche $FBXREC_BRANCH (version de développement)"
+  fi
   if [ -z "$src" ]; then
     tag=${FBXREC_VERSION:-}
     if [ -z "$tag" ]; then
@@ -115,15 +142,15 @@ install_packages() {
     dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "ok installed" || need+=("$p")
   done
   [ ${#need[@]} -eq 0 ] && return 0
-  say "installation des paquets : ${need[*]}"
-  DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${need[@]}" >/dev/null
+  say "installation des paquets : ${need[*]} (quelques minutes, bien plus sur Freebox Delta)"
+  DEBIAN_FRONTEND=noninteractive apt-get update -q
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q -o Dpkg::Progress-Fancy=1 "${need[@]}"
 }
 
 # choose_disk: prints the mount point of the Freebox disk, mounting it (and adding it to
 # /etc/fstab) when the VM does not mount one yet
 choose_disk() {
-  local mounts n share mp user
+  local mounts n share mp user err
   mapfile -t mounts < <(freebox_mounts)
   n=${#mounts[@]}
   if [ "$n" -eq 1 ]; then printf '%s' "${mounts[0]}"; return; fi
@@ -132,17 +159,33 @@ choose_disk() {
     die "précisez le dossier de sortie, par exemple FBXREC_OUT=\"${mounts[0]}/$OUT_SUBDIR\""
   fi
   share=${FBXREC_SHARE:-}
-  if [ -z "$share" ]; then
+  if [ -n "$share" ]; then
+    valid_share "$share" || die "nom de partage invalide : '$share'"
+    err=$(try_share "$share") || die "montage de //$FBX_HOST/$share impossible ($err) ; $SMB_HINT"
+  else
     mapfile -t found < <(probe_shares)
     if [ ${#found[@]} -eq 1 ]; then
       share=${found[0]}
     else
-      [ ${#found[@]} -gt 1 ] && say "partages trouvés : ${found[*]}"
-      share=$(ask "Nom du partage du disque Freebox (Freebox OS > Partage Windows) : ") \
-        || die "aucun disque Freebox trouvé ; relancez avec FBXREC_SHARE=<nom du partage>"
+      if [ ${#found[@]} -gt 1 ]; then
+        say "partages trouvés : ${found[*]}"
+      else
+        say "aucun disque Freebox trouvé sous les noms habituels (${SHARE_CANDIDATES[*]}) ; $SMB_HINT"
+      fi
+      while :; do
+        share=$(ask "Nom du partage (\\\\Freebox_Server\\<partage> : seulement <partage>, vide pour abandonner) : ") \
+          || die "pas de terminal pour demander le partage ; relancez avec FBXREC_SHARE=<nom du partage>"
+        [ -n "$share" ] || die "abandon ; relancez l'installation une fois le partage trouvé"
+        if ! valid_share "$share"; then
+          say "nom invalide : donnez seulement le nom du partage, sans \\ ni /"
+        elif err=$(try_share "$share"); then
+          break
+        else
+          say "montage de //$FBX_HOST/$share impossible ($err)"
+        fi
+      done
     fi
   fi
-  [ -n "$share" ] && [[ "$share" != */* ]] || die "nom de partage invalide : '$share'"
   mp=$(mount_point_for "$share")
   user=${FBXREC_USER:-freebox}
   id "$user" >/dev/null 2>&1 || die "utilisateur $user inconnu (FBXREC_USER=...)"
@@ -251,11 +294,11 @@ install_from() {
   curl -s -o /dev/null -m 10 -H "Host: localhost:$port" "http://localhost:$port/" \
     || die "le service tourne mais ne répond pas sur le port $port"
   ip=$(hostname -I | awk '{print $1}')
-  say "OK, interface web : http://$ip:$port/"
+  say "OK, interface web : http://$ip:$port/ (installation terminée en $(elapsed))"
   if [ ! -f "$DATA_DIR/password" ]; then
     case "$(ask "Protéger l'interface web par un mot de passe ? (recommandé) [O/n] " || echo n)" in
       ""|o|O|y|Y) /usr/local/bin/fbxrec-password < /dev/tty || true ;;   # it says why itself
-      *) say "sans mot de passe ; plus tard : sudo fbxrec-password" ;;
+      *) say "sans mot de passe web : à définir dans la page, section Paramètres" ;;
     esac
   fi
 }
