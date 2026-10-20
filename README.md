@@ -11,51 +11,14 @@ la vidéo) et le résultat est affiché dans la page.
 
 ## Ce qu'il faut
 
-- Une Freebox **Ultra** ou **Delta** (les seules qui proposent des VM). Testé sur Ultra.
-  Sur Delta, l'installation devrait fonctionner mais n'a pas encore été essayée : vos
-  retours sont bienvenus.
+- Une Freebox **Ultra** ou **Delta** (les seules qui proposent des VM). Testé sur Ultra,
+  installation réussie sur Delta.
+- Les partages Windows activés **avec SMBv2/SMBv3** (Freebox OS, **Paramètres de la
+  Freebox > Partages Windows**). Sur Delta ce n'est pas le cas d'office : sans ça, la VM
+  ne peut pas écrire sur le disque de la Freebox.
 - Un disque dans la Freebox (le disque interne suffit).
 - Pas de compte, pas de clé, pas d'application Freebox à autoriser : le programme lit le
   flux TV public de la box (`mafreebox.freebox.fr/freeboxtv/playlist.m3u`).
-
-## Avant de commencer : une clé SSH
-
-L'installation se fait en tapant deux commandes dans la VM, depuis votre ordinateur.
-Freebox OS demande pour cela une **clé SSH** : une paire de fichiers qui remplace le mot de
-passe. On la crée une seule fois.
-
-**Windows 10 ou 11** : ouvrez le Terminal (clic droit sur le bouton Démarrer, puis
-**Terminal** ou **Windows PowerShell**). Regardez d'abord si vous avez déjà une clé :
-
-```powershell
-dir $env:USERPROFILE\.ssh\*.pub
-```
-
-- Si un fichier s'affiche (par exemple `id_ed25519.pub` ou `id_rsa.pub`), vous avez déjà
-  une clé : gardez-la, ne la recréez pas, et passez à la copie ci-dessous en mettant le
-  nom de votre fichier.
-- Sinon, créez-en une :
-
-  ```powershell
-  ssh-keygen -t ed25519
-  ```
-
-  Appuyez trois fois sur Entrée (emplacement par défaut, pas de phrase secrète). Si la
-  question `Overwrite (y/n)?` apparaît, répondez **n** : une clé existe déjà, l'écraser
-  couperait les accès qu'elle ouvre ailleurs.
-
-Copiez ensuite la clé publique dans le presse-papier :
-
-```powershell
-Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | Set-Clipboard
-```
-
-**Mac ou Linux** : dans un terminal, `ls ~/.ssh/*.pub`. Si un fichier existe, utilisez-le.
-Sinon `ssh-keygen -t ed25519` (trois fois Entrée). Puis `cat ~/.ssh/id_ed25519.pub` (ou le
-nom de votre fichier) et copiez la ligne affichée.
-
-La clé publique (le fichier `.pub`, une ligne qui commence par `ssh-ed25519` ou `ssh-rsa`) peut se
-montrer sans risque. L'autre fichier, `id_ed25519` sans extension, ne se donne jamais.
 
 ## Installation sur une nouvelle VM
 
@@ -73,50 +36,70 @@ montrer sans risque. L'autre fichier, `id_ed25519` sans extension, ne se donne j
 
 2. Écran suivant :
    - Utilisateur par défaut : laissez `freebox`.
-   - Clé SSH : collez la clé publique copiée plus haut. Laissez le mot de passe vide.
-   - Cochez **Accès aux disques Freebox** : Freebox OS ajoute alors au cloud-init le
-     montage du disque de la Freebox, avec le bon nom selon le modèle.
+   - **Mot de passe** : choisissez-en un vrai (pas de clé SSH nécessaire). Il sert à se
+     connecter à la VM par le bouton **Console** de Freebox OS, en cas de souci.
+   - Cochez **Accès aux disques Freebox** (Ultra comme Delta) : Freebox OS ajoute alors au
+     cloud-init le montage du disque de la Freebox, avec le bon nom selon le modèle.
 
-   ![Système, utilisateur, clé SSH et accès aux disques](docs/img/03-systeme-disques.png)
+   ![Système, utilisateur et accès aux disques](docs/img/03-systeme-disques.png)
 
-3. Laissez le cloud-init proposé par Freebox OS **tel quel**.
+3. Freebox OS affiche ensuite le cloud-init qu'il a préparé. Ne changez rien, ajoutez
+   seulement **une ligne à la fin**, sous `- mount -a`, avec les mêmes 2 espaces devant :
+
+   ```yaml
+     - curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | bash > /var/log/fbxrec-install.log 2>&1
+   ```
+
+   La fin du cloud-init doit ressembler à ceci :
+
+   ```yaml
+   runcmd:
+     - mount -a
+     - curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | bash > /var/log/fbxrec-install.log 2>&1
+   ```
+
+   À faire **avant le premier démarrage** : cloud-init ne s'exécute qu'une fois. Si vous
+   l'avez oublié, voir « Installation sur une VM existante ».
+
+   Freebox OS y écrit aussi `ssh_pwauth: True` : la connexion SSH par mot de passe est
+   ouverte depuis le réseau local. Remplacez `True` par `False` si seule la Console de
+   Freebox OS vous suffit.
 4. Taille du disque : le minimum proposé (10 Go) convient. Les enregistrements ne sont pas
    stockés sur le disque de la VM mais sur celui de la Freebox.
 
    ![Taille du disque](docs/img/04-taille-disque.png)
 
-5. Démarrez la VM, puis donnez-lui une adresse fixe : dans la fenêtre VMs, menu
-   **Réseau > Configurer un bail DHCP**, choisissez une adresse en dehors de la plage
-   distribuée automatiquement. Sinon son adresse peut changer, et deux appareils sur la
-   même adresse coupent les enregistrements. Redémarrez la VM pour qu'elle la prenne.
+5. Démarrez la VM. Elle s'installe toute seule : quelques minutes sur Ultra, plus sur Delta.
+6. Donnez-lui une adresse fixe : dans la fenêtre VMs, menu **Réseau > Configurer un bail
+   DHCP**, choisissez une adresse en dehors de la plage distribuée automatiquement. Sinon
+   son adresse peut changer, et deux appareils sur la même adresse coupent les
+   enregistrements. Redémarrez la VM pour qu'elle la prenne.
 
    ![La VM créée, menu Réseau en haut](docs/img/05-vm-creee.png)
 
    ![Menu Réseau > Configurer un bail DHCP](docs/img/06-bail-dhcp.png)
 
-6. Dans le même Terminal qu'au début (PowerShell sous Windows), connectez-vous à la VM.
-   À la première connexion, répondez `yes` à la question sur l'empreinte. Puis lancez
-   l'installation :
+7. Ouvrez `http://<adresse de la VM>:8080/` dans un navigateur, puis définissez un mot de
+   passe web dans la section **Paramètres** en bas de la page.
 
-   ```bash
-   ssh freebox@<adresse de la VM>
-   ```
-
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | sudo bash
-   ```
-
-7. Ouvrez `http://<adresse de la VM>:8080/` dans un navigateur.
+Si la page ne répond pas : bouton **Console** de Freebox OS, connexion avec `freebox` et
+votre mot de passe, puis `cat /var/log/fbxrec-install.log` montre le déroulé de
+l'installation.
 
 ## Installation sur une VM existante
 
-La VM doit être une Debian 12 (ou plus récente) avec systemd. Même commande que
-l'étape 6 ci-dessus.
+La VM doit être une Debian 12 (ou plus récente) avec systemd. Connectez-vous (bouton
+**Console** de Freebox OS, ou SSH) et lancez :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | sudo bash
+```
 
 Le script installe `python3`, `ffmpeg`, `cifs-utils` et `curl`, cherche le disque de la
 Freebox (déjà monté, sinon il essaie les noms habituels), lance les tests du programme,
-puis démarre le service. Si le disque n'est pas trouvé, il demande le nom du partage
-(Freebox OS, **Paramètres de la Freebox > Partages Windows**), ou on le donne d'avance :
+puis démarre le service. Si le disque n'est pas trouvé, il demande le nom du partage,
+c'est-à-dire ce qui suit `\\Freebox_Server\` (pas `Freebox_Server` lui-même, qui est le
+nom du serveur), ou on le donne d'avance :
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | sudo env FBXREC_SHARE=interne bash
@@ -164,6 +147,52 @@ Certaines (le noyau surtout) ne prennent effet qu'au redémarrage, et la VM ne r
 jamais d'elle-même. Dans ce cas, **Paramètres > Système** affiche « Redémarrage
 nécessaire » et propose un bouton **Redémarrer la VM** (environ une minute). Il refuse si
 un enregistrement est en cours ou commence dans les 10 minutes.
+
+## Accès à la VM
+
+Le bouton **Console** de Freebox OS suffit (utilisateur `freebox`, mot de passe choisi à la
+création). On n'a besoin de s'y connecter que pour une installation sur une VM existante, ou en
+cas de souci.
+
+### Accès SSH avec une clé (facultatif)
+
+Pour se connecter depuis le terminal de votre ordinateur sans taper de mot de passe, on peut
+donner à Freebox OS une **clé SSH** à la création de la VM (champ « Clé SSH »). Attention :
+une VM créée avec une clé et sans mot de passe n'est plus accessible si l'ordinateur qui
+détient la clé disparaît. Gardez donc aussi le mot de passe.
+
+**Windows 10 ou 11** : ouvrez le Terminal (clic droit sur le bouton Démarrer, puis
+**Terminal** ou **Windows PowerShell**). Regardez d'abord si vous avez déjà une clé :
+
+```powershell
+dir $env:USERPROFILE\.ssh\*.pub
+```
+
+- Si un fichier s'affiche (par exemple `id_ed25519.pub` ou `id_rsa.pub`), vous avez déjà
+  une clé : gardez-la, ne la recréez pas, et passez à la copie ci-dessous en mettant le
+  nom de votre fichier.
+- Sinon, créez-en une :
+
+  ```powershell
+  ssh-keygen -t ed25519
+  ```
+
+  Appuyez trois fois sur Entrée (emplacement par défaut, pas de phrase secrète). Si la
+  question `Overwrite (y/n)?` apparaît, répondez **n** : une clé existe déjà, l'écraser
+  couperait les accès qu'elle ouvre ailleurs.
+
+Copiez ensuite la clé publique dans le presse-papier :
+
+```powershell
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | Set-Clipboard
+```
+
+**Mac ou Linux** : dans un terminal, `ls ~/.ssh/*.pub`. Si un fichier existe, utilisez-le.
+Sinon `ssh-keygen -t ed25519` (trois fois Entrée). Puis `cat ~/.ssh/id_ed25519.pub` (ou le
+nom de votre fichier) et copiez la ligne affichée.
+
+La clé publique (le fichier `.pub`, une ligne qui commence par `ssh-ed25519` ou `ssh-rsa`) peut se
+montrer sans risque. L'autre fichier, `id_ed25519` sans extension, ne se donne jamais.
 
 ## Limites connues
 

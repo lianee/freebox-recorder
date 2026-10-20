@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Enregistreur TV</title>
 <style>
-:root { --bg:#f6f7f9; --card:#fff; --fg:#1d232b; --muted:#667085; --line:#e3e6ea; --accent:#c8102e; --ok:#1a7f37; --warn:#b54708; }
-@media (prefers-color-scheme: dark) { :root { --bg:#14171c; --card:#1d2128; --fg:#e7eaee; --muted:#98a2b3; --line:#2c323b; --accent:#ff5c6c; --ok:#4cc26b; --warn:#f0a050; } }
+:root { --bg:#f6f7f9; --card:#fff; --fg:#1d232b; --muted:#667085; --line:#e3e6ea; --accent:#c8102e; --ok:#1a7f37; --warn:#b54708; --link:#0b5cad; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171c; --card:#1d2128; --fg:#e7eaee; --muted:#98a2b3; --line:#2c323b; --accent:#ff5c6c; --ok:#4cc26b; --warn:#f0a050; --link:#7cb8ff; } }
 * { box-sizing:border-box; }
 body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
 main { max-width:960px; margin:0 auto; padding:16px; }
@@ -17,6 +17,7 @@ table { width:100%; border-collapse:collapse; }
 th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
 th { color:var(--muted); font-weight:600; font-size:13px; }
 .muted { color:var(--muted); }
+a { color:var(--link); } a:visited { color:var(--link); }
 .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--accent); }
 .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px; }
 label { display:block; font-size:13px; color:var(--muted); }
@@ -192,7 +193,9 @@ async function loadSettings() {
   const s = await api("GET", "/api/settings");
   const disk = s.disk.error ? `disque inaccessible (${esc(s.disk.error)})`
     : `${size(s.disk.free)} libres sur ${size(s.disk.total)}`;
-  $("s-info").innerHTML = `Version ${esc(s.version)}. Enregistrements dans <code>${esc(s.out)}</code>, ${disk}.`;
+  const repo = `https://github.com/${s.repo.split("/").map(encodeURIComponent).join("/")}`;
+  $("s-info").innerHTML = `Version ${esc(s.version)}. Enregistrements dans <code>${esc(s.out)}</code>, ${disk}.`
+    + `<br>Aide, nouveautés et signalement de problèmes : <a href="${esc(repo)}" target="_blank" rel="noopener">${esc(repo.replace("https://", ""))}</a>`;
   $("s-pw-state").innerHTML = s.password === true ? `<span class="ok">Protégé par un mot de passe.</span>`
     : s.password === "invalid" ? `<span class="bad">Fichier de mot de passe illisible : enregistrez-en un nouveau.</span>`
     : `<span class="warn">Pas de mot de passe : tout appareil du réseau local peut modifier les programmations.</span>`;

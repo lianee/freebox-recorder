@@ -11,7 +11,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import __version__, auth, update
+from . import REPO, __version__, auth, update
 from . import schedule as sch
 from .auth import Guard
 from .recorder import Recording
@@ -134,7 +134,7 @@ def make_handler(d, extra_hosts=(), guard=None):
             pw = guard.enabled() if guard else None
         except ValueError:
             pw = "invalid"
-        return {"version": __version__, "out": d.out_root, "disk": disk, "password": pw,
+        return {"version": __version__, "repo": os.environ.get("FBXREC_REPO", REPO), "out": d.out_root, "disk": disk, "password": pw,
                 "update_allowed": update.allowed(), "update_log": update.log_tail(update_log),
                 "reboot_required": update.reboot_required(),
                 "reboot_allowed": update.allowed("systemctl", "reboot")}

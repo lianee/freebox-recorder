@@ -59,6 +59,46 @@ X
         self.assertNotEqual(rc, 0)
         self.assertIn("invalide", err)
 
+    def fake_mount(self, ok_share):
+        # mount succeeds only for //host/<ok_share>, failing like mount.cifs otherwise
+        self.fake("mount", f"""echo "$*" >> "{self.tmp.name}/mounts"
+case "$3" in */{ok_share}) exit 0 ;; esac
+echo "mount error(2): No such file or directory" >&2
+echo "Refer to the mount.cifs(8) manual page" >&2
+exit 32
+""")
+        self.fake("umount", "true\n")
+
+    def test_probe_shares(self):
+        self.fake_mount("Freebox")
+        self.assertEqual(self.sh("probe_shares")[:2], (0, "Freebox\n"))
+
+    def test_given_share_that_fails_says_why(self):
+        self.fake("findmnt", "true\n")
+        self.fake_mount("Freebox")
+        rc, _, err = self.sh("FBXREC_SHARE=Freebox_Server choose_disk")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("No such file or directory", err)
+        self.assertNotIn("Refer to", err)
+        self.assertIn("SMBv2", err)
+
+    def test_asks_again_after_a_bad_share(self):
+        # Delta case of 2026-10-19: the server name typed instead of the share name
+        self.fake("findmnt", "true\n")
+        self.fake_mount("nothing-matches")
+        answers = os.path.join(self.tmp.name, "answers")
+        with open(answers, "w") as f:
+            f.write("Freebox_Server\n\\\\Freebox_Server\\Freebox\n\n")
+        rc, _, err = self.sh(f'exec 4<"{answers}"; ask() {{ local a; read -r -u 4 a; printf %s "$a"; }}; choose_disk')
+        self.assertNotEqual(rc, 0)
+        self.assertIn("aucun disque Freebox trouvé", err)
+        self.assertIn("//mafreebox.freebox.fr/Freebox_Server impossible (mount error(2)", err)
+        self.assertIn("nom invalide", err)
+        self.assertIn("abandon", err)
+        with open(os.path.join(self.tmp.name, "mounts")) as f:
+            tried = [l.split()[2] for l in f]
+        self.assertEqual(tried[-1], "//mafreebox.freebox.fr/Freebox_Server")   # invalid one not tried
+
     def test_paths(self):
         self.assertEqual(self.sh("mount_point_for 'Disque dur'")[1], "/mnt/disque-dur")
         self.assertEqual(self.sh("fstab_escape '//h/Disque dur'")[1], r"//h/Disque\040dur")
@@ -112,6 +152,22 @@ X
         self.assertIn("téléchargement impossible", r.stderr)
         self.assertNotIn("unbound variable", r.stderr)
         self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "work")), "temp dir removed")
+
+    def test_messages_show_elapsed_time(self):
+        rc, _, err = self.sh(f'FBXREC_T0=$(( $(date +%s) - 125 )); say hello')
+        self.assertEqual(err.strip(), "fbxrec [2:05]: hello")
+
+    def test_branch_source(self):
+        dest = os.path.join(self.tmp.name, "dest")
+        os.mkdir(dest)
+        self.fake("curl", 'echo "$@" > "%s/url"; exit 22\n' % self.tmp.name)
+        rc, _, err = self.sh(f'FBXREC_BRANCH=master fetch "{dest}"')
+        self.assertNotEqual(rc, 0)
+        with open(os.path.join(self.tmp.name, "url")) as f:
+            self.assertIn("/archive/refs/heads/master.tar.gz", f.read())
+        self.assertIn("branche master", err)
+        rc, _, err = self.sh(f'FBXREC_BRANCH="../x; rm" fetch "{dest}"')
+        self.assertIn("nom de branche invalide", err)
 
 
 if __name__ == "__main__":
