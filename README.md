@@ -24,7 +24,7 @@ la vidéo) et le résultat est affiché dans la page.
 
 1. Dans Freebox OS, ouvrez **VMs** puis **Ajouter une VM**.
 
-   ![Fenêtre VMs de Freebox OS](docs/img/01-fenetre-vms.png)
+   ![Bouton Ajouter une VM](docs/img/01-fenetre-vms.png)
 
    - Nom : facultatif, vous pouvez le laisser vide. Il sert seulement à reconnaître la VM
      dans Freebox OS.
