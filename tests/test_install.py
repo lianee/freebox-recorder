@@ -169,6 +169,24 @@ exit 32
         rc, _, err = self.sh(f'FBXREC_BRANCH="../x; rm" fetch "{dest}"')
         self.assertIn("nom de branche invalide", err)
 
+    def test_package_install_options(self):
+        log = os.path.join(self.tmp.name, "apt.log")
+        self.fake("dpkg-query", "exit 1\n")                       # nothing installed
+        self.fake("apt-get", f'echo "$@" >> "{log}"\n')
+        self.fake("find", "echo /var/lib/apt/lists/x_Packages\n")  # lists fresh: no update
+        self.assertEqual(self.sh("install_packages")[0], 0)
+        with open(log) as f:
+            calls = f.read().splitlines()
+        self.assertEqual(len(calls), 1, calls)
+        self.assertIn("--no-install-recommends", calls[0])
+        self.assertIn("--force-unsafe-io", calls[0])
+        self.assertIn("ffmpeg", calls[0])
+        os.remove(log)
+        self.fake("find", "true\n")                                # stale lists: update first
+        self.sh("install_packages")
+        with open(log) as f:
+            self.assertTrue(f.read().startswith("update"))
+
 
 if __name__ == "__main__":
     unittest.main()

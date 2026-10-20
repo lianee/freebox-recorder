@@ -26,7 +26,8 @@ la vidéo) et le résultat est affiché dans la page.
 
    ![Fenêtre VMs de Freebox OS](docs/img/01-fenetre-vms.png)
 
-   - Nom : au choix (par exemple `PVR`).
+   - Nom : facultatif (par exemple `PVR`), il sert seulement à reconnaître la VM dans
+     Freebox OS.
    - **1 CPU et 512 Mo de RAM suffisent** (2 enregistrements simultanés testés : environ
      3 % du processeur, 110 Mo de mémoire). Le reste des ressources de la Freebox reste
      libre pour d'autres VM.
