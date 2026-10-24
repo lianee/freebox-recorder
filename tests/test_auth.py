@@ -125,10 +125,24 @@ class ApiWithPassword(unittest.TestCase):
         self.assertEqual(self.get("/api/schedules", basic("moi", "mauvais"))[0], 401)
         self.assertEqual(self.get("/api/schedules/0123456789ab", None, method="DELETE")[0], 401)
 
+    def test_instant_endpoints_need_auth(self):
+        for path in ("/api/instant", "/api/running/end", "/api/running/stop", "/api/settings/sms",
+                     "/api/settings/sms/test", "/api/retention", "/api/favorites"):
+            self.assertEqual(self.get(path, method="POST")[0], 401, path)
+        for path in ("/api/play?file=a.ts&t=0", "/api/probe?file=a.ts", "/api/epg?start=1", "/api/file?file=a.mkv", "/api/retention"):
+            self.assertEqual(self.get(path)[0], 401, path)
+            self.assertEqual(self.get(path, basic("moi", "mauvais"), method="POST")[0], 401, path)
+        self.assertEqual(self.get("/api/settings/sms", method="DELETE")[0], 401)
+        self.assertEqual(self.get("/api/recording?file=a.mkv", method="DELETE")[0], 401)
+        self.assertEqual(self.d.running, {})
+
     def test_running_open_to_loopback_only(self):
         # the test client is on 127.0.0.1: /api/running answers, everything else still asks
         self.assertEqual(self.get("/api/running")[0], 200)
         self.assertEqual(self.get("/api/running?x")[0], 401)
+        self.assertEqual(self.get("/api/busy?within=10")[0], 200)    # install.sh asks it too
+        self.assertEqual(self.get("/api/busy?within=10&x=1")[0], 401)
+        self.assertEqual(self.get("/api/busy")[0], 401)
         self.assertEqual(self.get("/api/results")[0], 401)
         self.assertEqual(self.get("/api/running", method="POST")[0], 401)
 

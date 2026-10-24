@@ -153,7 +153,22 @@ class Api(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/reboot", {})[0], 409)
         self.assertEqual(update.run.calls, [])
 
-    def test_reboot_refused_before_a_recording(self):
+    def test_busy_route(self):
+        self.assertEqual(self.req("GET", "/api/busy?within=10"), (200, {"busy": None}))
+        self.d.running["k"] = SimpleNamespace(is_alive=lambda: True)
+        try:
+            st, r = self.req("GET", "/api/busy?within=10")
+            self.assertIn("en cours", r["busy"])
+        finally:
+            del self.d.running["k"]
+        for q in ("?within=abc", "?within=1&within=2", "?within=10&x=1", "?within=1234"):
+            self.assertEqual(self.req("GET", "/api/busy" + q)[0], 400, q)
+
+    def test_update_refused_before_a_recording(self):
+        # an update restarts the service (~1 min): not right before a recording (user, 2026-10-20)
+        self.test_reboot_refused_before_a_recording("/api/update")
+
+    def test_reboot_refused_before_a_recording(self, path="/api/reboot"):
         now = self.d.now()
         soon = now + timedelta(minutes=5)
         s = sch.validate({"name": "Bientot", "service": 201, "channel": "France 2", "flavour": "sd",
@@ -162,7 +177,7 @@ class Api(unittest.TestCase):
                           "margin_before": 0, "margin_after": 0, "enabled": True})
         self.d.store.put(s)
         try:
-            st, r = self.req("POST", "/api/reboot", {})
+            st, r = self.req("POST", path, {})
             self.assertEqual(st, 409)
             self.assertIn("Bientot", r["error"])
             self.assertEqual(update.run.calls, [])

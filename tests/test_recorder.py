@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta
 
@@ -44,7 +45,7 @@ class RecorderTest(unittest.TestCase):
 
     def cmds(self):
         with open(self.log) as f:
-            return [json.loads(l) for l in f if "-t" in l]
+            return [json.loads(l) for l in f if "-map" in l]
 
     def test_single_segment(self):
         info = self.run_rec(occ(3))
@@ -96,10 +97,58 @@ class RecorderTest(unittest.TestCase):
         self.assertEqual(info["segments"], info["reconnects"] + 1)
         self.assertEqual(os.path.getsize(info["file"]), 188 * info["segments"])
         self.assertEqual(info["missed"], 2 * info["segments"])
-        # remaining duration shrinks at each retry
-        ts = [float(c[c.index("-t") + 1]) for c in self.cmds()]
-        self.assertEqual(ts, sorted(ts, reverse=True))
+        # no fixed duration: the end may move, the capture loop stops ffmpeg itself
+        self.assertFalse([c for c in self.cmds() if "-t" in c])
         self.assertFalse([f for f in os.listdir(os.path.join(self.out, "NOPLP")) if ".part" in f])
+
+    def test_end_moved_later_keeps_one_capture(self):
+        os.environ["FAKE_GROW"] = "1"
+        r = Recording(occ(2.5), self.out, self.res)
+        t0 = time.monotonic()
+        r.start()
+        time.sleep(0.5)
+        r.set_end(datetime.now(TZ) + timedelta(seconds=4))
+        r.join(30)
+        elapsed = time.monotonic() - t0
+        with open(self.res) as f:
+            info = json.loads(f.readlines()[-1])
+        self.assertEqual((info["state"], info["segments"], info["reconnects"]), ("done", 1, 0))
+        self.assertGreater(elapsed, 4)
+        self.assertEqual(len(self.cmds()), 1)
+
+    def test_end_moved_earlier_stops_soon(self):
+        os.environ["FAKE_GROW"] = "1"
+        r = Recording(occ(60), self.out, self.res)
+        t0 = time.monotonic()
+        r.start()
+        time.sleep(0.5)
+        r.set_end(datetime.now(TZ) + timedelta(seconds=1))
+        r.join(30)
+        self.assertLess(time.monotonic() - t0, 8)   # the capture loop polls every 5 s at most
+        with open(self.res) as f:
+            info = json.loads(f.readlines()[-1])
+        self.assertEqual((info["state"], info["segments"]), ("done", 1))
+
+    def test_failed_leaves_no_empty_part(self):
+        r = Recording(occ(30), self.out, self.res)
+        r.stopped.set()      # stops before any capture: nothing recorded
+        r.start(); r.join(10)
+        with open(self.res) as f:
+            self.assertEqual(json.loads(f.readlines()[-1])["state"], "failed")
+        self.assertEqual(os.listdir(os.path.join(self.out, "NOPLP")), [])
+
+    def test_same_name_same_second_gets_two_files(self):
+        # 2026-10-20 live: two instant recordings of one channel in the same second shared a
+        # name, both ffmpeg wrote the same .part0.ts. Both are built before either runs.
+        os.environ["FAKE_GROW"] = "1"
+        o = occ(3)
+        a, b = Recording(o, self.out, self.res), Recording(o, self.out, self.res)
+        a.start(); b.start(); a.join(30); b.join(30)
+        with open(self.res) as f:
+            files = [json.loads(l)["file"] for l in f]
+        self.assertEqual(len(set(files)), 2)
+        self.assertEqual(sorted(os.listdir(os.path.join(self.out, "NOPLP"))),
+                         sorted(os.path.basename(f) for f in files))
 
     def test_no_french_track_falls_back_and_says_so(self):
         os.environ["FAKE_NOFRA"] = "1"
