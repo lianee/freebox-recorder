@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Enregistreur TV</title>
 <style>
-:root { --bg:#f6f7f9; --card:#fff; --fg:#1d232b; --muted:#667085; --line:#e3e6ea; --accent:#c8102e; --ok:#1a7f37; --warn:#b54708; --link:#0b5cad; }
-@media (prefers-color-scheme: dark) { :root { --bg:#14171c; --card:#1d2128; --fg:#e7eaee; --muted:#98a2b3; --line:#2c323b; --accent:#ff5c6c; --ok:#4cc26b; --warn:#f0a050; --link:#7cb8ff; } }
+:root { --bg:#f6f7f9; --card:#fff; --fg:#1d232b; --muted:#667085; --line:#e3e6ea; --accent:#c8102e; --ok:#1a7f37; --warn:#b54708; --link:#0b5cad; --primary:#1f62b8; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171c; --card:#1d2128; --fg:#e7eaee; --muted:#98a2b3; --line:#2c323b; --accent:#ff5c6c; --ok:#4cc26b; --warn:#f0a050; --link:#7cb8ff; --primary:#2f6fcb; } }
 * { box-sizing:border-box; }
 body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
 main { max-width:960px; margin:0 auto; padding:16px; }
@@ -26,22 +26,100 @@ input, select { width:100%; padding:6px 8px; border:1px solid var(--line); borde
 .days label { display:inline-flex; align-items:center; gap:4px; margin-right:10px; color:var(--fg); font-size:14px; }
 .days input { width:auto; }
 button { padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
-button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+button { white-space:nowrap; }
+button.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+/* red only for what destroys or cuts, and for the record button */
+button.danger, button.rec { background:var(--accent); color:#fff; border-color:var(--accent); }
+@media (max-width:640px) {
+  /* tables become cards: one block per row, "label: value" lines, buttons below */
+  table.cards tr:has(th) { display:none; }
+  table.cards tr { display:block; padding:8px 0; border-bottom:1px solid var(--line); }
+  table.cards td { display:flex; gap:12px; justify-content:space-between; align-items:baseline; border:none; padding:3px 0; text-align:right; }
+  table.cards td::before { content:attr(data-label); color:var(--muted); font-size:13px; flex:none; text-align:left; }
+  table.cards td.row-actions { justify-content:flex-start; flex-wrap:wrap; gap:6px; padding-top:8px; }
+  table.cards td:has(> span:empty) { display:none; }       /* no value: no line */
+  table.cards td:not([data-label]) { display:block; text-align:left; }   /* "Aucun ..." */
+  table.cards td.row-actions button { margin:0; }
+  .g-ch { width:96px !important; font-size:12px !important; }
+}
 .row-actions button { margin-right:6px; }
 #msg, .msg { min-height:1.4em; margin-top:8px; }
 h3 { font-size:15px; margin:18px 0 6px; }
 pre { white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
 .scroll { overflow-x:auto; }
+video { width:100%; max-height:60vh; background:#000; border-radius:6px; }
+#player { position:relative; }
+#player h2 { padding-right:40px; }
+.p-close { position:absolute; top:8px; right:8px; width:32px; height:32px; padding:0; font-size:20px; line-height:1;
+  border:none; background:transparent; color:var(--muted); }
+.p-close:hover { color:var(--fg); }
+.g-ctl { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin-bottom:10px; }
+.g-ctl > div { min-width:130px; }
+.g-find { display:flex; align-items:flex-end; gap:10px; margin-left:auto; }
+.g-favonly { display:inline-flex; align-items:center; gap:4px; color:var(--fg); font-size:14px; white-space:nowrap; padding-bottom:7px; }
+.g-favonly input { width:auto; }
+.g-favonly[hidden] { display:none; }
+.g-find input#g-filter { width:160px; }
+@media (max-width:640px) { .g-find { margin-left:0; width:100%; } .g-find > div { flex:1; } .g-find input#g-filter { width:100%; } }   /* display:inline-flex would beat the hidden attribute */
+.g-wrap { overflow:auto; max-height:70vh; border:1px solid var(--line); border-radius:6px; }
+.g-grid { position:relative; min-width:900px; }
+.g-row { position:relative; height:34px; border-bottom:1px solid var(--line); }
+.g-ch { position:sticky; left:0; z-index:2; width:150px; height:100%; padding:7px 8px; background:var(--card); border-right:1px solid var(--line);
+  font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.g-p { position:absolute; top:2px; bottom:2px; padding:5px 6px; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  background:var(--bg); border:1px solid var(--line); border-radius:4px; cursor:pointer; }
+/* guide colour code: grey outline = hover, text-colour outline = selected, blue = to be
+   recorded, faded = over. Red is kept for the "now" line only. */
+.g-p:hover { border-color:var(--muted); }
+.g-head { position:sticky; top:0; z-index:4; height:24px; font-size:12px; color:var(--muted); background:var(--card); }
+.g-head .g-ch { z-index:5; }
+.g-p.past { opacity:.45; }
+.g-p.rec { background:color-mix(in srgb, var(--primary) 22%, var(--bg)); border-color:color-mix(in srgb, var(--primary) 60%, var(--line));
+  box-shadow:inset 3px 0 0 var(--primary); }
+.g-p.sel { border-color:var(--fg); box-shadow:0 0 0 1px var(--fg); z-index:1; }
+.g-p.rec.sel { box-shadow:inset 3px 0 0 var(--primary), 0 0 0 1px var(--fg); }
+.g-legend { display:flex; gap:14px; font-size:12px; color:var(--muted); margin:-4px 0 8px; }
+.g-legend span::before { content:""; display:inline-block; width:22px; height:12px; margin-right:5px; vertical-align:-2px;
+  border:1px solid var(--line); border-radius:3px; background:var(--bg); }
+.g-legend .l-rec::before { background:color-mix(in srgb, var(--primary) 22%, var(--bg)); border-color:color-mix(in srgb, var(--primary) 60%, var(--line)); box-shadow:inset 3px 0 0 var(--primary); }
+.g-legend .l-sel::before { border:2px solid var(--fg); }
+.g-legend .l-past::before { opacity:.45; }
+.g-head span { position:absolute; top:4px; }
+.g-now { position:absolute; top:0; bottom:0; width:2px; background:var(--accent); z-index:1; pointer-events:none; }
+#g-detail { position:sticky; bottom:0; z-index:3; margin-top:10px; }
+dialog#ask { border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--fg); max-width:440px; width:calc(100% - 32px); padding:18px; }
+dialog#ask::backdrop { background:rgba(0,0,0,.45); }
+dialog#ask h2 { margin:0 0 8px; }
+dialog#ask .ask-btns { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+/* the box's logos are drawn for its dark TV screen (white text): dark pad in both themes */
+img.logo { height:20px; max-width:44px; vertical-align:middle; margin-right:6px; background:#23272f; border-radius:3px; padding:1px 3px; }
+.fav { padding-right:4px; color:var(--muted); font-size:15px; line-height:1; }
+.fav.on { color:#e8b400; }
+.g-ch[data-fav] { cursor:pointer; }
+.g-ch img.logo { margin-right:5px; }
+/* phones: the column is narrow, the logo and number name the channel (full name in the tooltip) */
+@media (max-width:640px) { .g-ch img.logo { height:16px; max-width:30px; padding:1px; margin-right:3px; } .g-ch .g-name { display:none; } }
+.g-ch[data-fav]:hover .fav { color:#e8b400; }
+nav.tabs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+nav.tabs a { padding:8px 14px; text-decoration:none; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; }
+nav.tabs a.on { color:var(--fg); border-bottom-color:var(--primary); font-weight:600; }
 </style>
 </head>
 <body>
 <main>
 <h1>Enregistreur TV</h1>
+<nav class="tabs">
+  <a href="#prog" data-tab="prog">Programmations</a>
+  <a href="#rec" data-tab="rec">En cours / Résultats</a>
+  <a href="#guide" data-tab="guide">Guide TV</a>
+  <a href="#settings" data-tab="settings">Paramètres</a>
+</nav>
 
+<div class="tab" id="tab-prog">
 <section>
   <h2 id="form-title">Nouvelle programmation</h2>
   <div class="grid">
-    <div><label>Nom (dossier)</label><input id="f-name" maxlength="60" placeholder="Journal de 20h"></div>
+    <div><label>Dossier</label><input id="f-name" maxlength="60" placeholder="Journal de 20h"></div>
     <div><label>Chaîne</label><select id="f-service"></select></div>
     <div><label>Qualité</label><select id="f-flavour"><option value="sd">SD</option><option value="hd">HD</option></select></div>
     <div><label>Type</label><select id="f-kind"><option value="weekly">Récurrent</option><option value="once">Ponctuel</option></select></div>
@@ -52,6 +130,11 @@ pre { white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
     <div><label>Marge après (min)</label><input id="f-ma" type="number" min="0" max="60" value="5"></div>
   </div>
   <div id="w-days" class="days" style="margin-top:10px"></div>
+  <div class="grid" style="margin-top:10px">
+    <div class="days"><label><input type="checkbox" id="f-follow"> Suivre le guide TV</label></div>
+    <div id="w-gtitle" style="grid-column:span 2"><label>Titre dans le guide</label><input id="f-gtitle" maxlength="200" placeholder="Journal 20h00"></div>
+  </div>
+  <div class="muted" id="f-follow-help" style="margin-top:4px">Avec « Suivre le guide », les horaires annoncés par le guide pour ce titre remplacent les horaires ci-dessus, marges en plus : à 2 h près de l'heure prévue, sinon plus tard dans la soirée ou la nuit (émission déplacée), sinon plus tôt dans la journée. Sans résultat dans le guide, les horaires ci-dessus s'appliquent.</div>
   <div style="margin-top:12px">
     <button class="primary" id="save">Enregistrer</button>
     <button id="cancel" hidden>Annuler la modification</button>
@@ -59,13 +142,58 @@ pre { white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
   <div id="msg"></div>
 </section>
 
-<section><h2>Programmations</h2><div class="scroll"><table id="t-sched"></table></div></section>
-<section><h2>En cours</h2><div class="scroll"><table id="t-running"></table></div></section>
-<section><h2>Prochains enregistrements</h2><div class="scroll"><table id="t-upcoming"></table></div></section>
-<section><h2>Derniers enregistrements</h2><div class="scroll"><table id="t-results"></table></div></section>
+<section><h2>Programmations</h2><div class="scroll"><table id="t-sched" class="cards"></table></div></section>
+<section><h2>Prochains enregistrements <span class="muted" style="font-weight:400;font-size:13px">7 jours, marges comprises</span></h2><div class="scroll"><table id="t-upcoming" class="cards"></table></div></section>
+</div>
 
-<section id="settings">
-  <h2>Paramètres</h2>
+<div class="tab" id="tab-rec" hidden>
+<section>
+  <h2>Enregistrement immédiat</h2>
+  <div class="grid">
+    <div><label>Chaîne</label><select id="i-service"></select></div>
+    <div style="align-self:end"><button class="rec" id="i-go">Enregistrer maintenant</button></div>
+  </div>
+  <div class="muted" style="margin-top:6px">Durée 1 h, modifiable pendant l'enregistrement. Fichiers dans le dossier « Immédiat ».</div>
+  <div id="i-msg" class="msg"></div>
+</section>
+<section id="player" hidden>
+  <button class="p-close" id="p-close" title="Fermer" aria-label="Fermer le lecteur">×</button>
+  <h2 id="p-title"></h2>
+  <video id="p-video" controls playsinline></video>
+  <div id="p-msg" class="msg"></div>
+</section>
+<section><h2>En cours</h2><div class="scroll"><table id="t-running" class="cards"></table></div></section>
+<section><h2>Derniers enregistrements</h2><div class="scroll"><table id="t-results" class="cards"></table></div></section>
+</div>
+
+<div class="tab" id="tab-guide" hidden>
+<section>
+  <div class="g-ctl">
+    <div><label>Jour</label><select id="g-day"></select></div>
+    <div><label>À partir de</label><select id="g-hour"></select></div>
+    <div><button id="g-now">Maintenant</button> <button id="g-prev">-3 h</button> <button id="g-next">+3 h</button></div>
+    <div class="g-find"><div><label>Chaîne</label><input id="g-filter" placeholder="Filtrer"></div>
+      <label class="g-favonly" id="w-favonly"><input type="checkbox" id="g-favonly"> Favoris seulement</label></div>
+  </div>
+  <div class="g-legend"><span class="l-rec">à enregistrer</span><span class="l-sel">sélection</span><span class="l-past">déjà passé</span></div>
+  <div id="g-msg" class="msg"></div>
+  <div class="g-wrap"><div class="g-grid" id="g-grid"></div></div>
+  <section id="g-detail" hidden>
+    <img id="g-d-pic" alt="" style="float:right; width:168px; max-width:40%; margin:0 0 8px 12px; border-radius:6px" hidden>
+    <h2 id="g-d-title"></h2>
+    <div id="g-d-when" class="muted"></div>
+    <div id="g-d-rec" class="muted"></div>
+    <p id="g-d-desc"></p>
+    <button id="g-once">Programmer une fois</button>
+    <button id="g-weekly">Programmer chaque semaine</button>
+    <button id="g-d-close">Fermer</button>
+  </section>
+</section>
+</div>
+
+<div class="tab" id="tab-settings" hidden>
+<section>
+  <h2>À propos</h2>
   <div id="s-info" class="muted"></div>
 
   <h3>Mot de passe</h3>
@@ -80,6 +208,27 @@ pre { white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
   </div>
   <div id="s-pw-msg" class="msg"></div>
 
+  <h3>Alertes par SMS (abonnés Free Mobile)</h3>
+  <div id="s-sms-state"></div>
+  <div class="muted" style="margin-top:4px">Un SMS sur votre téléphone si un enregistrement échoue ou a des trous, si une conversion échoue, ou si le disque de la Freebox est presque plein.
+    Dans votre espace abonné Free Mobile, menu « Mes options », activez « Notifications par SMS », puis recopiez ici l'identifiant et la clé affichés.</div>
+  <div class="grid" style="margin-top:8px">
+    <div><label>Identifiant Free Mobile</label><input id="s-sms-user" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="8 chiffres"></div>
+    <div><label>Clé d'identification</label><input id="s-sms-key" type="password" autocomplete="off"></div>
+  </div>
+  <div style="margin-top:10px">
+    <button class="primary" id="s-sms-set">Enregistrer et envoyer un test</button>
+    <button id="s-sms-test" hidden>Envoyer un test</button>
+    <button id="s-sms-del" hidden>Désactiver</button>
+  </div>
+  <div id="s-sms-msg" class="msg"></div>
+
+  <h3>Suppression automatique</h3>
+  <div class="muted">Par dossier, les vidéos plus anciennes que le nombre de jours indiqué sont supprimées (d'après la date de l'émission).
+    Vide = jamais. Les autres fichiers du dossier (résultats d'analyse, notes) sont gardés.</div>
+  <div class="scroll" style="margin-top:8px"><table id="t-retention" class="cards"></table></div>
+  <div id="s-ret-msg" class="msg"></div>
+
   <h3>Mise à jour</h3>
   <div id="s-up-state"></div>
   <div style="margin-top:10px">
@@ -91,19 +240,42 @@ pre { white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
 
   <h3>Système</h3>
   <div id="s-sys-state"></div>
-  <div style="margin-top:10px"><button class="primary" id="s-reboot" hidden>Redémarrer la VM</button></div>
+  <div style="margin-top:10px"><button class="danger" id="s-reboot" hidden>Redémarrer la VM</button></div>
   <div id="s-sys-msg" class="msg"></div>
 </section>
+</div>
 </main>
+<dialog id="ask"><form method="dialog">
+  <h2 id="ask-title"></h2><div id="ask-text"></div>
+  <div class="ask-btns"><button value="">Annuler</button><button class="primary" value="ok" id="ask-ok"></button></div>
+</form></dialog>
 <script>
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const $ = id => document.getElementById(id);
-let editing = null, channels = [];
+// confirmation inside the page: the browser's confirm() shows the VM address as its title
+function ask(title, text, ok, danger = false) {
+  const d = $("ask");
+  $("ask-title").textContent = title; $("ask-text").textContent = text; $("ask-ok").textContent = ok;
+  $("ask-ok").className = danger ? "danger" : "primary";
+  d.returnValue = "";
+  return new Promise(res => { d.onclose = () => res(d.returnValue === "ok"); d.showModal(); $("ask-ok").focus(); });
+}
+let editing = null, channels = [], outRoot = null, pl = null;
+
+function showTab() {
+  const t = document.getElementById("tab-" + location.hash.slice(1)) ? location.hash.slice(1) : "prog";
+  document.querySelectorAll(".tab").forEach(d => d.hidden = d.id !== "tab-" + t);
+  if (t !== "rec") $("p-video").pause();   // the player lives in the En cours tab
+  document.querySelectorAll("nav.tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === t));
+}
+window.addEventListener("hashchange", showTab); showTab();
+window.addEventListener("hashchange", () => { if (location.hash === "#guide" && !guide.loaded) loadGuide(); });
 
 $("w-days").innerHTML = DAYS.map((d, i) => `<label><input type="checkbox" value="${i}">${d}</label>`).join("");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = iso => new Date(iso).toLocaleString("fr-FR", {weekday:"short", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
-const size = b => b == null ? "" : (b / 1073741824).toFixed(2) + " Go";
+const size = b => b == null ? "" : b < 1073741824 ? Math.max(1, Math.round(b / 1048576)) + " Mo"
+  : (b / 1073741824).toFixed(2).replace(".", ",") + " Go";
 
 async function api(method, path, body) {
   const r = await fetch(path, {method, headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
@@ -115,13 +287,15 @@ async function api(method, path, body) {
 function syncKind() {
   const once = $("f-kind").value === "once";
   $("w-date").hidden = !once; $("w-days").hidden = once;
+  $("w-gtitle").hidden = $("f-follow-help").hidden = !$("f-follow").checked;
 }
-$("f-kind").onchange = syncKind;
+$("f-kind").onchange = $("f-follow").onchange = syncKind;
 
 function resetForm() {
   editing = null; $("form-title").textContent = "Nouvelle programmation"; $("cancel").hidden = true;
   $("f-name").value = ""; $("f-date").value = ""; $("f-start").value = ""; $("f-end").value = "";
   $("f-mb").value = 5; $("f-ma").value = 5; $("f-kind").value = "weekly"; $("f-flavour").value = "sd";
+  $("f-follow").checked = false; $("f-gtitle").value = "";
   document.querySelectorAll("#w-days input").forEach(c => c.checked = false); syncKind();
 }
 $("cancel").onclick = resetForm;
@@ -131,8 +305,9 @@ function edit(s) {
   $("f-name").value = s.name; $("f-service").value = s.service; $("f-flavour").value = s.flavour;
   $("f-kind").value = s.kind; $("f-date").value = s.date || ""; $("f-start").value = s.start; $("f-end").value = s.end;
   $("f-mb").value = s.margin_before; $("f-ma").value = s.margin_after;
+  $("f-follow").checked = !!s.follow_guide; $("f-gtitle").value = s.guide_title || "";
   document.querySelectorAll("#w-days input").forEach(c => c.checked = (s.days || []).includes(+c.value));
-  syncKind(); window.scrollTo({top: 0, behavior: "smooth"});
+  syncKind(); location.hash = "prog"; window.scrollTo({top: 0, behavior: "smooth"});
 }
 
 $("save").onclick = async () => {
@@ -142,6 +317,7 @@ $("save").onclick = async () => {
     flavour: $("f-flavour").value, kind: $("f-kind").value, start: $("f-start").value, end: $("f-end").value,
     margin_before: parseInt($("f-mb").value, 10), margin_after: parseInt($("f-ma").value, 10),
     enabled: editing ? editing.enabled : true,
+    follow_guide: $("f-follow").checked, guide_title: $("f-gtitle").value.trim(),
   };
   if (editing) s.id = editing.id;
   if (s.kind === "once") s.date = $("f-date").value;
@@ -150,50 +326,298 @@ $("save").onclick = async () => {
   catch (e) { $("msg").innerHTML = `<span class="bad">Refusé : ${esc(e.message)}</span>`; }
 };
 
+const FULL_DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+function daysText(ds) {
+  ds = [...ds].sort((a, b) => a - b);
+  if (ds.length === 7) return "Tous les jours";
+  if (ds.length === 1) return "Chaque " + FULL_DAYS[ds[0]];
+  if (ds.length >= 3 && ds.every((d, i) => !i || d === ds[i - 1] + 1)) return `Du ${FULL_DAYS[ds[0]]} au ${FULL_DAYS[ds.at(-1)]}`;
+  return ds.map(d => DAYS[d]).join(", ");
+}
 function when(s) {
   const t = `${s.start} à ${s.end}` + (s.end < s.start ? " (lendemain)" : "");
   if (s.kind === "once") return `${new Date(s.date + "T12:00").toLocaleDateString("fr-FR", {weekday:"long", day:"numeric", month:"long"})}, ${t}`;
-  return (s.days.length === 7 ? "Tous les jours" : s.days.map(d => DAYS[d]).join(" ")) + ", " + t;
+  return daysText(s.days) + ", " + t;
+}
+// a table cell with its label: on a phone each row becomes a card "label: value" (CSS table.cards)
+// (the value is wrapped in one span so that a value made of several pieces stays one block)
+const td = (label, html, cls = "") => `<td data-label="${label}"${cls ? ` class="${cls}"` : ""}>${label ? `<span>${html}</span>` : html}</td>`;
+// channel logos: the box serves them by a fixed path (928/928 channels, no rate limit)
+const logo = svc => svc ? `<img class="logo" src="http://mafreebox.freebox.fr/api/latest/tv/img/channels/logos68x60/uuid-webtv-${+svc}.png" alt="" loading="lazy" onerror="this.remove()">` : "";
+let favs = new Set();   // favourite channels, kept on the VM (same on every device)
+function fillChannels() {
+  const opt = c => `<option value="${c.service}">${c.number} - ${esc(c.name)}</option>`;
+  const fav = channels.filter(c => favs.has(c.service));
+  const html = !channels.length ? `<option value="201">2 - France 2</option>`
+    : fav.length ? `<optgroup label="Favoris">${fav.map(opt).join("")}</optgroup><optgroup label="Toutes les chaînes">${channels.map(opt).join("")}</optgroup>`
+    : channels.map(opt).join("");
+  for (const id of ["f-service", "i-service"]) { const sel = $(id), v = sel.value; sel.innerHTML = html; if (v) sel.value = v; }
+}
+const hhmm = iso => new Date(iso).toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"});
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+
+// redraw a table only when its content changed: the 30 s refresh must not replace a button
+// under the mouse
+function setTable(id, html) {
+  const t = $(id);
+  if (t.dataset.html !== html) { t.innerHTML = html; t.dataset.html = html; }
 }
 
 async function refresh() {
   const [sched, up, run, res] = await Promise.all(["schedules", "upcoming", "running", "results"].map(p => api("GET", "/api/" + p)));
-  $("t-sched").innerHTML = "<tr><th>Nom</th><th>Chaîne</th><th>Quand</th><th>Marges</th><th></th></tr>" + (sched.length ? sched.map(s => `
-    <tr class="${s.enabled ? "" : "muted"}"><td>${esc(s.name)}</td><td>${esc(s.channel)} (${s.flavour.toUpperCase()})</td>
-    <td>${esc(when(s))}</td><td>-${s.margin_before} / +${s.margin_after} min</td>
-    <td class="row-actions"><button data-a="edit" data-id="${s.id}">Modifier</button><button data-a="toggle" data-id="${s.id}">${s.enabled ? "Suspendre" : "Réactiver"}</button><button data-a="del" data-id="${s.id}">Supprimer</button></td></tr>`).join("")
-    : `<tr><td colspan="5" class="muted">Aucune programmation.</td></tr>`);
+  guide.up = up; if (guide.loaded && !$("tab-guide").hidden) drawGuide();
+  setTable("t-sched", "<tr><th>Dossier</th><th>Chaîne</th><th>Quand</th><th>Marges</th><th></th></tr>" + (sched.length ? sched.map(s => `
+    <tr class="${s.enabled ? "" : "muted"}">${td("Dossier", esc(s.name))}${td("Chaîne", `${logo(s.service)}${esc(s.channel)} (${s.flavour.toUpperCase()})`)}
+    ${td("Quand", esc(when(s)) + (s.follow_guide ? `<br><span class="muted">suit le guide : « ${esc(s.guide_title)} »</span>` : "") + (s.enabled ? "" : `<br><span class="warn">suspendue</span>`))}
+    ${td("Marges", `-${s.margin_before} / +${s.margin_after} min`)}
+    ${td("", `<button data-a="edit" data-id="${s.id}">Modifier</button><button data-a="toggle" data-id="${s.id}">${s.enabled ? "Suspendre" : "Réactiver"}</button><button data-a="del" data-id="${s.id}">Supprimer</button>`, "row-actions")}</tr>`).join("")
+    : `<tr><td colspan="5" class="muted">Aucune programmation.</td></tr>`));
   $("t-sched").onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
     const s = sched.find(x => x.id === b.dataset.id);
     if (b.dataset.a === "edit") return edit(s);
     if (b.dataset.a === "toggle") await api("POST", "/api/schedules", {...s, enabled: !s.enabled});
-    if (b.dataset.a === "del" && confirm(`Supprimer la programmation « ${s.name} » ? Les fichiers déjà enregistrés sont conservés.`)) await api("DELETE", "/api/schedules/" + s.id);
+    if (b.dataset.a === "del" && await ask("Supprimer la programmation", `« ${s.name} » ne sera plus enregistré. Les fichiers déjà enregistrés sont conservés.`, "Supprimer", true)) await api("DELETE", "/api/schedules/" + s.id);
     refresh();
   };
-  $("t-running").innerHTML = run.length ? "<tr><th>Nom</th><th>Jusqu'à</th><th>Coupures</th><th></th></tr>" + run.map(r => `
-    <tr><td>${esc(r.name)}</td><td>${fmt(r.end)}</td><td>${r.reconnects}</td><td><button data-key="${esc(r.key)}">Arrêter</button></td></tr>`).join("")
-    : `<tr><td class="muted">Aucun enregistrement en cours.</td></tr>`;
+  // do not redraw under the user's fingers while an end time is being edited
+  if (!$("t-running").contains(document.activeElement)) {
+    $("t-running").innerHTML = run.length ? "<tr><th>Dossier</th><th>Chaîne</th><th>Jusqu'à</th><th>Coupures</th><th></th></tr>" + run.map(r => `
+      <tr>${td("Dossier", esc(r.name))}${td("Chaîne", logo(r.service) + esc(r.channel))}
+      ${td("Jusqu'à", `<input type="time" value="${hhmm(r.end)}" data-end="${esc(r.key)}" style="width:auto"> <button data-a="end" data-key="${esc(r.key)}">Changer la fin</button>`)}
+      ${td("Coupures", r.reconnects)}${td("", (relPath(r.part) ? `<button data-play="${esc(relPath(r.part))}" data-title="${esc(r.name + " (en cours)")}">Lire</button>` : "") + `<button data-a="stop" data-key="${esc(r.key)}">Arrêter</button>`, "row-actions")}</tr>`).join("")
+      : `<tr><td class="muted">Aucun enregistrement en cours.</td></tr>`;
+  }
   $("t-running").onclick = async e => {
-    const b = e.target.closest("button"); if (!b || !confirm("Arrêter cet enregistrement ? Ce qui est déjà capturé est conservé.")) return;
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.play) return openPlayer(b.dataset.play, b.dataset.title);
+    if (b.dataset.a === "end") {
+      const v = [...document.querySelectorAll("[data-end]")].find(i => i.dataset.end === b.dataset.key).value;
+      try { await api("POST", "/api/running/end", {key: b.dataset.key, end: v}); b.blur(); $("i-msg").innerHTML = `<span class="ok">Fin changée : ${esc(v)}.</span>`; }
+      catch (err) { $("i-msg").innerHTML = `<span class="bad">Refusé : ${esc(err.message)}</span>`; }
+      return refresh();
+    }
+    if (!await ask("Arrêter l'enregistrement", "Ce qui est déjà enregistré est conservé.", "Arrêter", true)) return;
     await api("POST", "/api/running/stop", {key: b.dataset.key}); setTimeout(refresh, 1500);
   };
-  $("t-upcoming").innerHTML = up.length ? "<tr><th>Nom</th><th>Début (marge comprise)</th><th>Fin</th></tr>" + up.slice(0, 10).map(o => `
-    <tr><td>${esc(o.name)}</td><td>${fmt(o.start)}</td><td>${fmt(o.end)}</td></tr>`).join("")
-    : `<tr><td class="muted">Rien de prévu.</td></tr>`;
-  $("t-results").innerHTML = res.length ? "<tr><th>Nom</th><th>Émission</th><th>État</th><th>Taille</th><th>Pertes</th></tr>" + res.map(r => {
+  setTable("t-upcoming", up.length ? "<tr><th>Dossier</th><th>Chaîne</th><th>Début</th><th>Fin</th></tr>" + up.map(o => `
+    <tr>${td("Dossier", esc(o.name) + (o.guided ? ` <span class="muted">(horaires du guide)</span>` : ""))}${td("Chaîne", logo(o.service) + esc(o.channel))}
+    ${td("Début", fmt(o.start))}${td("Fin", sameDay(o.start, o.end) ? hhmm(o.end) : fmt(o.end))}</tr>`).join("")
+    : `<tr><td class="muted">Rien de prévu dans les 7 jours.</td></tr>`);
+  setTable("t-results", res.length ? "<tr><th>Dossier</th><th>Chaîne</th><th>Émission</th><th>État</th><th>Taille</th><th>Pertes</th><th></th></tr>" + res.map(r => {
     const bad = r.state !== "done" || r.gaps || r.reconnects || r.missed;
     const loss = r.gaps == null ? "non mesuré" : (r.gaps ? `${r.gaps} trous, ${r.missing_s} s` : "aucune") + (r.reconnects ? `, ${r.reconnects} coupure(s)` : "");
-    const st = {done: "terminé", stopped: "arrêté", failed: "échec"}[r.state] || r.state;
-    return `<tr><td>${esc(r.name)}</td><td>${fmt(r.show_start)}</td><td class="${r.state === "failed" ? "bad" : ""}">${st}</td><td>${size(r.size)}</td><td class="${bad ? "warn" : "ok"}">${esc(loss)}</td></tr>`;
-  }).join("") : `<tr><td class="muted">Aucun enregistrement terminé.</td></tr>`;
+    const st = r.deleted ? "supprimé" : {done: "terminé", stopped: "arrêté", failed: "échec"}[r.state] || r.state;
+    const rel = !r.deleted && relPath(r.file);
+    return `<tr class="${r.deleted ? "muted" : ""}">${td("Dossier", esc(r.name))}${td("Chaîne", r.channel ? logo(r.service || (channels.find(c => c.name === r.channel) || {}).service) + esc(r.channel) : "")}${td("Émission", fmt(r.show_start))}
+      ${td("État", st, r.state === "failed" ? "bad" : "")}${td("Taille", r.deleted ? "" : size(r.size))}${td("Pertes", esc(loss), bad ? "warn" : "ok")}
+      ${td("", rel ? `<button data-play="${esc(rel)}" data-title="${esc(r.name + ", " + fmt(r.show_start))}">Lire</button><button data-del="${esc(rel)}">Supprimer</button>` : "", "row-actions")}</tr>`;
+  }).join("") : `<tr><td class="muted">Aucun enregistrement terminé.</td></tr>`);
 }
 
+// ---- check player, the browser's own controls. A .mkv is played as is. A .ts (recording in
+// progress, or not converted) is rewrapped by the VM into MP4 from a given second, 10 min at a
+// time: a capture in progress opens 2 min before live, an old .ts at its start.
+const relPath = f => outRoot && f && f.startsWith(outRoot + "/") ? f.slice(outRoot.length + 1) : null;
+
+async function openPlayer(rel, title) {
+  $("player").hidden = false; $("p-title").textContent = title; $("p-msg").textContent = "Lecture du fichier...";
+  window.scrollTo({top: $("player").offsetTop - 10, behavior: "smooth"});
+  try {
+    const r = await api("GET", "/api/probe?file=" + encodeURIComponent(rel));
+    const dur = r.duration || 0, v = $("p-video");
+    pl = {rel};
+    $("p-msg").textContent = "";
+    if (rel.endsWith(".mkv")) v.src = "/api/file?file=" + encodeURIComponent(rel);
+    else {
+      const t = /\.part\d+\.ts$/.test(rel) ? Math.max(0, dur - 120) : 0;
+      v.src = `/api/play?file=${encodeURIComponent(rel)}&t=${t.toFixed(0)}`;
+      if (t) $("p-msg").innerHTML = `<span class="muted">Enregistrement en cours : lecture 2 minutes avant le direct.</span>`;
+    }
+    v.play().catch(() => {});
+  } catch (e) { $("p-msg").innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+}
+
+function closePlayer() {
+  const v = $("p-video"); v.pause(); v.removeAttribute("src"); v.load();   // closes the stream on the VM
+  pl = null; $("player").hidden = true;
+}
+
+$("p-video").onerror = () => { if (pl) $("p-msg").innerHTML = `<span class="bad">Lecture impossible (deux lectures au plus en même temps).</span>`; };
+$("p-close").onclick = closePlayer;
+$("t-results").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-play]"); if (b) return openPlayer(b.dataset.play, b.dataset.title);
+  const d = e.target.closest("button[data-del]"); if (!d) return;
+  if (!await ask("Supprimer l'enregistrement", `Le fichier ${d.dataset.del} sera supprimé définitivement du disque de la Freebox.`, "Supprimer", true)) return;
+  try { await api("DELETE", "/api/recording?file=" + encodeURIComponent(d.dataset.del)); }
+  catch (err) { await ask("Suppression impossible", err.message, "OK"); }
+  if (pl && pl.rel === d.dataset.del) closePlayer();
+  refresh();
+});
+
+// ---- TV guide: Freebox EPG through the VM, 3 h of every channel; a click prefills the form
+const guide = {loaded: false, start: 0, hours: 3, progs: {}, sel: null};
+const PX_MIN = 5;   // pixels per minute
+const hm = ts => new Date(ts * 1000).toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"});
+
+function guideControls() {
+  const days = [...Array(8)].map((_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i); return d; });
+  $("g-day").innerHTML = days.map(d => `<option value="${d.getTime() / 1000}">${d.toLocaleDateString("fr-FR", {weekday: "long", day: "numeric", month: "long"})}</option>`).join("");
+  $("g-hour").innerHTML = [...Array(24)].map((_, h) => `<option value="${h}">${String(h).padStart(2, "0")}h</option>`).join("");
+}
+function guideSetStart(ts) {
+  ts -= ts % 3600;
+  const d = new Date(ts * 1000); const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const opt = [...$("g-day").options].find(o => +o.value === day.getTime() / 1000);
+  if (!opt) return;
+  $("g-day").value = opt.value; $("g-hour").value = d.getHours();
+  guide.start = ts; loadGuide();
+}
+function guideFromControls() {
+  const d = new Date(+$("g-day").value * 1000); d.setHours(+$("g-hour").value);
+  guide.start = d.getTime() / 1000; loadGuide();
+}
+async function loadGuide() {
+  if (!guide.start) { guideControls(); const n = Math.floor(Date.now() / 1000); guide.start = n - n % 3600;
+    $("g-hour").value = new Date().getHours(); }
+  guide.loaded = true;
+  clearTimeout(guide.retry);
+  const start = guide.start;
+  try {
+    const r = await api("GET", `/api/epg?start=${start}&hours=${guide.hours}`);
+    if (start !== guide.start) return;   // the user moved on meanwhile
+    guide.progs = r.progs; drawGuide();
+    // the VM fetches the guide from the box slowly (the box limits its API): missing hours
+    // are fetched first, look again shortly
+    $("g-msg").innerHTML = r.missing.length ? `<span class="muted">Guide en cours de chargement depuis la Freebox (${r.missing.length} heure(s) manquante(s)), la grille se complète toute seule...</span>` : "";
+    if (r.missing.length) guide.retry = setTimeout(loadGuide, 15000);
+  } catch (e) { $("g-msg").innerHTML = `<span class="bad">Guide indisponible : ${esc(e.message)}</span>`; }
+}
+function drawGuide() {
+  // no favourite yet: the box is hidden and does not filter
+  const anyFav = channels.some(c => favs.has(c.service));
+  $("w-favonly").hidden = !anyFav;
+  const favOnly = anyFav && $("g-favonly").checked;
+  const start = guide.start, end = start + guide.hours * 3600, f = $("g-filter").value.trim().toLowerCase();
+  const CW = matchMedia("(max-width:640px)").matches ? 96 : 150;   // channel column, see CSS
+  const x = ts => CW + (Math.max(ts, start) - start) / 60 * PX_MIN;
+  // a programme mostly inside a coming recording is marked; one already over is greyed
+  const recs = (guide.up || []).map(o => ({s: o.service, a: Date.parse(o.start) / 1000, b: Date.parse(o.end) / 1000}));
+  const recorded = (svc, p) => recs.some(r => r.s === svc && Math.min(r.b, p.start + p.duration) - Math.max(r.a, p.start) >= p.duration / 2);
+  let html = `<div class="g-row g-head"><div class="g-ch"></div>` + [...Array(guide.hours * 2)].map((_, i) =>
+    `<span style="left:${x(start + i * 1800)}px">${hm(start + i * 1800)}</span>`).join("") + `</div>`;
+  const now = Date.now() / 1000;
+  for (const c of channels) {
+    const ps = guide.progs[c.service]; if (!ps || (f && !c.name.toLowerCase().includes(f))) continue;
+    const fav = favs.has(c.service); if (favOnly && !fav) continue;
+    html += `<div class="g-row"><div class="g-ch" data-fav="${c.service}" title="${esc(c.name)} : ${fav ? "retirer des favoris" : "ajouter aux favoris"}"><span class="fav${fav ? " on" : ""}">${fav ? "★" : "☆"}</span>${logo(c.service)}${c.number}<span class="g-name"> ${esc(c.name)}</span></div>` + ps.map((p, i) => {
+      const l = x(p.start), w = Math.max(4, x(Math.min(p.start + p.duration, end)) - l - 2);
+      const sel = guide.sel && guide.sel.c.service === c.service && guide.sel.p.start === p.start;   // survives redraws
+      const cls = (p.start + p.duration < now ? " past" : "") + (recorded(c.service, p) ? " rec" : "") + (sel ? " sel" : "");
+      return `<div class="g-p${cls}" style="left:${l}px;width:${w}px" data-s="${c.service}" data-i="${i}" title="${esc(hm(p.start) + " " + p.title)}">${esc(p.title)}</div>`;
+    }).join("") + `</div>`;
+  }
+  if (now > start && now < end) html += `<div class="g-now" style="left:${x(now)}px"></div>`;
+  $("g-grid").style.width = (CW + guide.hours * 60 * PX_MIN) + "px";
+  $("g-grid").innerHTML = html;
+}
+$("g-grid").onclick = async e => {
+  const star = e.target.closest(".g-ch[data-fav]");   // the star or the channel name
+  if (star) {
+    const svc = +star.dataset.fav;
+    favs.has(svc) ? favs.delete(svc) : favs.add(svc);
+    try { favs = new Set(await api("POST", "/api/favorites", {services: [...favs]})); }
+    catch (err) { $("g-msg").innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
+    drawGuide(); fillChannels(); return;
+  }
+  const el = e.target.closest(".g-p"); if (!el) return;
+  document.querySelectorAll(".g-p.sel").forEach(x => x.classList.remove("sel")); el.classList.add("sel");
+  const c = channels.find(c => c.service === +el.dataset.s), p = guide.progs[el.dataset.s][+el.dataset.i];
+  guide.sel = {c, p};
+  const ep = [p.season && `saison ${p.season}`, p.episode && `épisode ${p.episode}`, p.sub_title].filter(Boolean).join(", ");
+  $("g-d-title").textContent = p.title + (ep ? ` (${ep})` : "");
+  $("g-d-when").textContent = `${c.name}, ${new Date(p.start * 1000).toLocaleDateString("fr-FR", {weekday: "long", day: "numeric", month: "long"})}, ${hm(p.start)} à ${hm(p.start + p.duration)}${p.category ? ", " + p.category : ""}`;
+  $("g-d-desc").textContent = p.desc; $("g-detail").hidden = false;
+  const pic = $("g-d-pic");   // served by the box itself, see epg.py
+  pic.hidden = !p.picture; pic.onerror = () => { pic.hidden = true; };
+  if (p.picture) pic.src = "http://mafreebox.freebox.fr" + p.picture; else pic.removeAttribute("src");
+  // other showings at about the same time over the cached days: recurring or one-off?
+  guide.sel.days = null; $("g-d-rec").textContent = "Recherche des autres diffusions...";
+  suggest(null);
+  const sel = guide.sel;
+  api("GET", `/api/epg/recurrence?service=${c.service}&title=${encodeURIComponent(p.title)}&start=${p.start}`).then(r => {
+    if (guide.sel !== sel) return;
+    const once = r.count <= 1;
+    sel.days = once ? null : r.days;
+    $("g-d-rec").textContent = once ? "Une seule diffusion à cette heure-là dans les jours à venir."
+      : `Diffusé aussi à cette heure-là : ${r.days.map(d => DAYS[d]).join(" ")}.`;
+    // seen once: a film, TV film or documentary is a one-off, anything else probably weekly
+    suggest(once && /^(Film|Téléfilm|Documentaire)$/.test(p.category) ? "once" : "weekly");
+  }).catch(() => { if (guide.sel === sel) $("g-d-rec").textContent = ""; });
+};
+function suggest(kind) {
+  $("g-once").classList.toggle("primary", kind === "once");
+  $("g-weekly").classList.toggle("primary", kind === "weekly");
+}
+$("g-d-close").onclick = () => { $("g-detail").hidden = true; guide.sel = null; document.querySelectorAll(".g-p.sel").forEach(x => x.classList.remove("sel")); };
+$("g-filter").oninput = () => drawGuide();
+$("g-favonly").onchange = () => { try { localStorage.setItem("fbxrec-favonly", $("g-favonly").checked ? "1" : ""); } catch (e) {} drawGuide(); };
+try { $("g-favonly").checked = localStorage.getItem("fbxrec-favonly") === "1"; } catch (e) {}
+$("g-day").onchange = $("g-hour").onchange = guideFromControls;
+$("g-now").onclick = () => guideSetStart(Math.floor(Date.now() / 1000));
+$("g-prev").onclick = () => guideSetStart(guide.start - 3 * 3600);
+$("g-next").onclick = () => guideSetStart(guide.start + 3 * 3600);
+
+// folder name allowed by the server (letters, digits, spaces, simple punctuation, 60 max)
+const safeName = t => (t.normalize("NFC").replace(/[^\p{L}\p{N} .,'’!?()&+-]/gu, " ").replace(/\.\.+/g, ".").replace(/\s+/g, " ").trim()
+  .replace(/^[^\p{L}\p{N}_]+/u, "").slice(0, 60).trim()) || "Guide";
+function fromGuide(kind) {
+  const {c, p} = guide.sel, d = new Date(p.start * 1000), e = new Date((p.start + p.duration) * 1000);
+  const two = n => String(n).padStart(2, "0");
+  resetForm();
+  $("f-name").value = safeName(p.title); $("f-service").value = c.service; $("f-kind").value = kind;
+  $("f-start").value = `${two(d.getHours())}:${two(d.getMinutes())}`; $("f-end").value = `${two(e.getHours())}:${two(e.getMinutes())}`;
+  $("f-date").value = `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+  const wd = (d.getDay() + 6) % 7;   // Monday = 0, as on the server
+  const days = guide.sel.days || [wd];   // the days it was found on, else the clicked one
+  document.querySelectorAll("#w-days input").forEach(x => x.checked = days.includes(+x.value));
+  $("f-follow").checked = true; $("f-gtitle").value = p.title;
+  syncKind(); $("g-detail").hidden = true;
+  location.hash = "prog"; window.scrollTo({top: 0, behavior: "smooth"});
+  $("msg").innerHTML = `<span class="muted">Prérempli depuis le guide : vérifiez puis cliquez sur Enregistrer.</span>`;
+}
+$("g-once").onclick = () => fromGuide("once");
+$("g-weekly").onclick = () => fromGuide("weekly");
+
+async function loadRetention() {
+  const rows = await api("GET", "/api/retention");
+  $("t-retention").innerHTML = rows.length ? "<tr><th>Dossier</th><th>Vidéos</th><th>Taille</th><th>Garder (jours)</th><th></th></tr>" + rows.map(r => `
+    <tr>${td("Dossier", esc(r.folder))}${td("Vidéos", r.files)}${td("Taille", size(r.size))}
+    ${td("Garder (jours)", `<input type="number" min="1" max="3650" value="${r.days ?? ""}" placeholder="jamais" data-folder="${esc(r.folder)}" style="width:7em">`)}
+    ${td("", `<button data-folder="${esc(r.folder)}">Enregistrer</button>`, "row-actions")}</tr>`).join("")
+    : `<tr><td class="muted">Aucun dossier d'enregistrements.</td></tr>`;
+}
+$("t-retention").onclick = async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const v = [...document.querySelectorAll("#t-retention input")].find(i => i.dataset.folder === b.dataset.folder).value.trim();
+  const days = v === "" ? null : Number(v);
+  if (days !== null && !(Number.isInteger(days) && days >= 1 && days <= 3650)) {
+    $("s-ret-msg").innerHTML = `<span class="bad">Nombre de jours : un entier de 1 à 3650, ou vide pour ne jamais supprimer.</span>`; return;
+  }
+  if (days !== null && !await ask("Suppression automatique", `Dossier « ${b.dataset.folder} » : les vidéos de plus de ${days} jours seront supprimées définitivement, dans les 10 minutes puis au fur et à mesure.`, "Activer", true)) return;
+  try {
+    await api("POST", "/api/retention", {folder: b.dataset.folder, days});
+    $("s-ret-msg").innerHTML = `<span class="ok">${days === null ? "Plus de suppression automatique" : "Gardé " + days + " jours"} pour « ${esc(b.dataset.folder)} ».</span>`; loadRetention();
+  } catch (err) { $("s-ret-msg").innerHTML = `<span class="bad">Refusé : ${esc(err.message)}</span>`; }
+};
+
 async function loadSettings() {
+  loadRetention().catch(e => { $("s-ret-msg").innerHTML = `<span class="bad">${esc(e.message)}</span>`; });
   const s = await api("GET", "/api/settings");
   const disk = s.disk.error ? `disque inaccessible (${esc(s.disk.error)})`
     : `${size(s.disk.free)} libres sur ${size(s.disk.total)}`;
   const repo = `https://github.com/${s.repo.split("/").map(encodeURIComponent).join("/")}`;
+  outRoot = s.out;
   $("s-info").innerHTML = `Version ${esc(s.version)}. Enregistrements dans <code>${esc(s.out)}</code>, ${disk}.`
     + `<br>Aide, nouveautés et signalement de problèmes : <a href="${esc(repo)}" target="_blank" rel="noopener">${esc(repo.replace("https://", ""))}</a>`;
   $("s-pw-state").innerHTML = s.password === true ? `<span class="ok">Protégé par un mot de passe.</span>`
@@ -201,6 +625,11 @@ async function loadSettings() {
     : `<span class="warn">Pas de mot de passe : tout appareil du réseau local peut modifier les programmations.</span>`;
   $("s-pw-set").textContent = s.password === true ? "Changer le mot de passe" : "Enregistrer le mot de passe";
   $("s-pw-del").hidden = s.password !== true;
+  $("s-sms-state").innerHTML = s.sms.error ? `<span class="bad">${esc(s.sms.error)}</span>`
+    : s.sms.configured ? `<span class="ok">Alertes activées (identifiant ${esc(s.sms.user)}).</span>`
+    : `<span class="muted">Alertes désactivées.</span>`;
+  $("s-sms-test").hidden = $("s-sms-del").hidden = !s.sms.configured;
+  $("s-sms-set").textContent = s.sms.configured ? "Changer et envoyer un test" : "Enregistrer et envoyer un test";
   $("s-up-check").hidden = !s.update_allowed;
   $("s-up-state").innerHTML = s.update_allowed ? "" : `<span class="muted">Mise à jour depuis la page indisponible sur cette VM : dans un terminal, <code>sudo fbxrec-update</code>.</span>`;
   $("s-sys-state").innerHTML = s.reboot_required === null
@@ -211,6 +640,13 @@ async function loadSettings() {
   $("s-up-log").hidden = !s.update_log.length;
   $("s-up-log").textContent = s.update_log.length ? "Dernière mise à jour :\n" + s.update_log.join("") : "";
 }
+
+$("i-go").onclick = async () => {
+  try {
+    await api("POST", "/api/instant", {service: +$("i-service").value});
+    $("i-msg").innerHTML = `<span class="ok">Enregistrement lancé.</span>`; setTimeout(refresh, 1000);
+  } catch (e) { $("i-msg").innerHTML = `<span class="bad">Refusé : ${esc(e.message)}</span>`; }
+};
 
 $("s-pw-set").onclick = async () => {
   const a = $("s-pw1").value, b = $("s-pw2").value;
@@ -224,9 +660,27 @@ $("s-pw-set").onclick = async () => {
 };
 
 $("s-pw-del").onclick = async () => {
-  if (!confirm("Supprimer le mot de passe ? Tout appareil du réseau local pourra modifier les programmations.")) return;
+  if (!await ask("Supprimer le mot de passe", "Tout appareil du réseau local pourra modifier les programmations.", "Supprimer", true)) return;
   await api("DELETE", "/api/settings/password");
   $("s-pw-msg").innerHTML = `<span class="ok">Mot de passe supprimé.</span>`; loadSettings();
+};
+
+$("s-sms-set").onclick = async () => {
+  $("s-sms-msg").textContent = "Envoi du SMS de test...";
+  try {
+    await api("POST", "/api/settings/sms", {user: $("s-sms-user").value.trim(), key: $("s-sms-key").value.trim()});
+    $("s-sms-user").value = $("s-sms-key").value = "";
+    $("s-sms-msg").innerHTML = `<span class="ok">SMS de test envoyé : vérifiez votre téléphone.</span>`; loadSettings();
+  } catch (e) { $("s-sms-msg").innerHTML = `<span class="bad">Refusé : ${esc(e.message)}</span>`; }
+};
+$("s-sms-test").onclick = async () => {
+  $("s-sms-msg").textContent = "Envoi...";
+  try { await api("POST", "/api/settings/sms/test", {}); $("s-sms-msg").innerHTML = `<span class="ok">SMS de test envoyé.</span>`; }
+  catch (e) { $("s-sms-msg").innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+};
+$("s-sms-del").onclick = async () => {
+  if (!await ask("Désactiver les alertes par SMS", "L'identifiant et la clé sont effacés de la VM.", "Désactiver")) return;
+  await api("DELETE", "/api/settings/sms"); $("s-sms-msg").innerHTML = `<span class="ok">Alertes désactivées.</span>`; loadSettings();
 };
 
 $("s-up-check").onclick = async () => {
@@ -241,7 +695,7 @@ $("s-up-check").onclick = async () => {
 };
 
 $("s-up-go").onclick = async () => {
-  if (!confirm("Installer la mise à jour ? Le service redémarre (environ 2 minutes), aucun enregistrement n'est coupé : la mise à jour refuse s'il y en a un en cours.")) return;
+  if (!await ask("Installer la mise à jour", "Le service redémarre (environ 2 minutes). Aucun enregistrement n'est coupé : la mise à jour refuse s'il y en a un en cours, ou s'il en commence un dans les 10 minutes.", "Installer")) return;
   try {
     await api("POST", "/api/update", {});
     $("s-up-go").hidden = true;
@@ -255,7 +709,7 @@ $("s-up-go").onclick = async () => {
 };
 
 $("s-reboot").onclick = async () => {
-  if (!confirm("Redémarrer la VM ? L'interface sera indisponible environ une minute. Refusé si un enregistrement est en cours ou commence bientôt.")) return;
+  if (!await ask("Redémarrer la VM", "L'interface sera indisponible environ une minute. Refusé si un enregistrement est en cours ou commence dans les 10 minutes.", "Redémarrer", true)) return;
   try {
     await api("POST", "/api/reboot", {});
     $("s-reboot").hidden = true;
@@ -269,13 +723,12 @@ $("s-reboot").onclick = async () => {
 };
 
 (async () => {
-  loadSettings();
-  channels = await api("GET", "/api/channels");
-  $("f-service").innerHTML = channels.length
-    ? channels.map(c => `<option value="${c.service}">${c.number} - ${esc(c.name)}</option>`).join("")
-    : `<option value="201">2 - France 2</option>`;
-  if (channels.some(c => c.service === 201)) $("f-service").value = 201;
+  await loadSettings().catch(() => {});
+  [channels, favs] = await Promise.all([api("GET", "/api/channels"), api("GET", "/api/favorites").then(f => new Set(f)).catch(() => new Set())]);
+  fillChannels();
+  if (!favs.size && channels.some(c => c.service === 201)) $("f-service").value = $("i-service").value = 201;
   resetForm(); refresh(); setInterval(refresh, 30000);
+  if (location.hash === "#guide") loadGuide();
 })();
 </script>
 </body>

@@ -13,6 +13,8 @@
 #   FBXREC_OUT      output folder; default "<Freebox disk>/Enregistrements TV", disk detected
 #   FBXREC_SHARE    Freebox disk share name to mount when none is mounted (Ultra: "interne", Delta: "Freebox")
 #   FBXREC_USER     service user; default the owner of the Freebox disk mount, else "freebox"
+#   FBXREC_PORT     web UI port; default 80, or 8080 when 80 is taken; given on an existing
+#                   install, it replaces the configured one
 #   FBXREC_REPO     GitHub "owner/name" releases come from
 #   FBXREC_TARBALL  URL or local path of a .tar.gz to install instead of the latest release
 #   FBXREC_VERSION  release tag to install instead of the latest
@@ -99,11 +101,37 @@ recording_now() {
   echo "$running"
 }
 
+# busy_reason: prints why a restart now would cut a recording (one running, or one starting
+# within 10 min) and succeeds then. Asks /api/busy; a service older than that route (404)
+# is asked /api/running only, so updating from an old version still works.
+busy_reason() {
+  systemctl is-active -q fbxrec 2>/dev/null || return 1
+  local port out code body reason
+  port=$(sed -n 's/^FBXREC_PORT=//p' "$ENV_FILE" 2>/dev/null); port=${port:-8080}
+  if ! out=$(curl -s -m 10 -w '\n%{http_code}' -H "Host: localhost:$port" "http://localhost:$port/api/busy?within=10"); then
+    echo "service actif mais muet, impossible de savoir"; return 0   # unknown = assume busy
+  fi
+  code=${out##*$'\n'}; body=${out%$'\n'*}
+  case "$code" in
+    200)
+      if ! reason=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.load(sys.stdin)["busy"] or "")' 2>/dev/null); then
+        echo "réponse illisible du service, impossible de savoir"; return 0
+      fi
+      [ -n "$reason" ] && { echo "$reason"; return 0; }
+      return 1 ;;
+    404)
+      local r
+      if r=$(recording_now); then echo "enregistrement en cours : $r"; return 0; fi
+      return 1 ;;
+    *) echo "réponse $code du service, impossible de savoir"; return 0 ;;
+  esac
+}
+
 guard_idle() {
   [ "${FORCE:-0}" = 1 ] && return 0
   local r
-  if r=$(recording_now); then
-    die "enregistrement en cours, rien n'est modifié (FORCE=1 pour forcer) : $r"
+  if r=$(busy_reason); then
+    die "$r : rien n'est modifié (FORCE=1 pour forcer)"
   fi
 }
 
@@ -207,14 +235,42 @@ choose_disk() {
   printf '%s' "$mp"
 }
 
+# port_free N: nothing listens on TCP port N on this machine
+port_free() { ! ss -ltnH "sport = :$1" 2>/dev/null | grep -q .; }
+
+# web_url IP PORT: the address to type (no ":80")
+web_url() { [ "$2" = 80 ] && printf 'http://%s/' "$1" || printf 'http://%s:%s/' "$1" "$2"; }
+
+# wanted_port: the FBXREC_PORT asked for, checked (a number, free on this VM), or nothing
+wanted_port() {
+  [ -n "${FBXREC_PORT:-}" ] || return 0
+  [[ "$FBXREC_PORT" =~ ^[0-9]{1,5}$ ]] && [ "$FBXREC_PORT" -ge 1 ] && [ "$FBXREC_PORT" -le 65535 ] \
+    || die "FBXREC_PORT=$FBXREC_PORT : un numéro de port de 1 à 65535"
+  port_free "$FBXREC_PORT" || die "port $FBXREC_PORT déjà utilisé sur cette VM, choisissez-en un autre (FBXREC_PORT=...)"
+  printf '%s' "$FBXREC_PORT"
+}
+
 write_config() {
-  [ -f "$ENV_FILE" ] && { say "configuration existante gardée : $ENV_FILE"; return; }
-  local out=${FBXREC_OUT:-}
+  local out=${FBXREC_OUT:-} port
+  port=$(wanted_port)
+  if [ -f "$ENV_FILE" ]; then
+    # an existing configuration keeps its port (bookmarks), unless FBXREC_PORT asks otherwise
+    if [ -n "$port" ] && ! grep -qx "FBXREC_PORT=$port" "$ENV_FILE"; then
+      if grep -q '^FBXREC_PORT=' "$ENV_FILE"; then sed -i "s/^FBXREC_PORT=.*/FBXREC_PORT=$port/" "$ENV_FILE"
+      else echo "FBXREC_PORT=$port" >> "$ENV_FILE"; fi
+      say "port de l'interface web changé : $port"
+    fi
+    say "configuration existante gardée : $ENV_FILE"; return
+  fi
   [ -n "$out" ] || out="$(choose_disk)/$OUT_SUBDIR"
+  # port 80 (plain address) unless something on this VM already listens there
+  if [ -z "$port" ]; then
+    if port_free 80; then port=80; else port=8080; say "port 80 déjà utilisé sur cette VM : l'interface sera sur le port 8080"; fi
+  fi
   cat > "$ENV_FILE" <<EOF
 # fbxrec settings, read by systemd at start (sudo systemctl restart fbxrec, never during a recording)
 FBXREC_OUT=$out
-FBXREC_PORT=8080
+FBXREC_PORT=$port
 # extra Host names allowed for the web UI, comma separated (the VM IP and name always are)
 #FBXREC_HOSTS=
 EOF
@@ -320,7 +376,7 @@ install_from() {
     || die "le service tourne mais ne répond pas sur le port $port"
   selftest "$user" "$out"
   ip=$(hostname -I | awk '{print $1}')
-  say "OK, interface web : http://$ip:$port/ (installation terminée en $(elapsed))"
+  say "OK, interface web : $(web_url "$ip" "$port") (installation terminée en $(elapsed))"
   if [ ! -f "$DATA_DIR/password" ]; then
     case "$(ask "Protéger l'interface web par un mot de passe ? (recommandé) [O/n] " || echo n)" in
       ""|o|O|y|Y) /usr/local/bin/fbxrec-password < /dev/tty || true ;;   # it says why itself

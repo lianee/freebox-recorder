@@ -10,6 +10,8 @@ Environment=PYTHONUNBUFFERED=1
 # FBXREC_OUT (required), FBXREC_PORT...: written by install.sh
 EnvironmentFile=/etc/fbxrec.env
 WorkingDirectory=/opt/fbxrec
+# lets the service (not root) listen on port 80: that one right, nothing else
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 ExecStart=/usr/bin/python3 -m fbxrec.app
 Restart=always
 RestartSec=5

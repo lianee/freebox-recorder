@@ -5,6 +5,16 @@ Le programme tourne dans une machine virtuelle (VM) de la Freebox. On programme 
 enregistrements (une fois, ou chaque semaine à jours fixes) depuis une page web, sur
 n'importe quel appareil du réseau local.
 
+La page a quatre onglets :
+- **Programmations** : créer, modifier, suspendre les enregistrements prévus.
+- **En cours / Résultats** : enregistrement immédiat (on choisit la chaîne, 1 h par défaut,
+  heure de fin modifiable pendant l'enregistrement, fichiers dans le dossier « Immédiat »),
+  enregistrements en cours, derniers résultats et un lecteur pour contrôler un fichier
+  (début, milieu, fin).
+- **Guide TV** : le programme de toutes les chaînes, fourni par la Freebox. Un clic sur une
+  émission prépare sa programmation, une fois ou chaque semaine.
+- **Paramètres** : mot de passe, alertes par SMS, mise à jour, redémarrage.
+
 Pourquoi : le magnétoscope intégré de la Freebox abîme une partie des enregistrements
 (images manquantes). Ici, chaque enregistrement est vérifié à la fin (taille, trous dans
 la vidéo) et le résultat est affiché dans la page.
@@ -94,8 +104,9 @@ la vidéo) et le résultat est affiché dans la page.
 
    ![Menu Réseau > Configurer un bail DHCP](docs/img/06-bail-dhcp.png)
 
-7. Ouvrez `http://<adresse de la VM>:8080/` dans un navigateur, puis définissez un mot de
-   passe web dans la section **Paramètres** en bas de la page.
+7. Ouvrez `http://<adresse de la VM>/` dans un navigateur, puis définissez un mot de
+   passe web dans l'onglet **Paramètres** de la page. (Si le port 80 était déjà utilisé sur
+   la VM, l'installation le signale et l'adresse est `http://<adresse de la VM>:8080/`.)
 
 Si la page ne répond pas : bouton **Console** de Freebox OS, connexion avec `freebox` et
 votre mot de passe, puis `cat /var/log/fbxrec-install.log` montre le déroulé de
@@ -121,14 +132,24 @@ curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/inst
 ```
 
 Les enregistrements vont dans `<disque Freebox>/Enregistrements TV/<nom>/`, un fichier par
-diffusion : `2026-10-31 21h00 - France 2.ts`. Les fichiers `.ts` se lisent avec VLC.
+diffusion : `2026-10-31 21h00 - France 2.mkv` (enregistré en `.ts`, converti en `.mkv` après
+la fin, voir « Limites connues »).
+
+L'interface web écoute sur le port 80 (adresse sans numéro de port), ou sur le 8080 si le 80
+est déjà utilisé sur la VM. Pour en imposer un autre, à l'installation comme plus tard :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lianee/freebox-recorder/master/install.sh | sudo env FBXREC_PORT=8081 bash
+```
+
+L'installation refuse un port déjà utilisé sur la VM.
 
 Réglages avancés (dossier de sortie, port) : `/etc/fbxrec.env`, puis `sudo systemctl restart fbxrec`,
 **jamais pendant un enregistrement** (il serait coupé).
 
 ## Paramètres
 
-Tout se règle depuis la page web, section **Paramètres** en bas : le terminal ne sert
+Tout se règle depuis la page web, onglet **Paramètres** : le terminal ne sert
 qu'à l'installation. On y trouve la version installée, le dossier des enregistrements et
 la place libre sur le disque de la Freebox.
 
@@ -143,7 +164,24 @@ Mot de passe oublié : dans la VM, `sudo fbxrec-password --remove` le supprime, 
 `sudo fbxrec-password` en définit un nouveau.
 
 L'interface est faite pour le réseau local uniquement : ne l'ouvrez pas sur Internet
-(pas de redirection de port vers la VM).
+(pas de redirection de port vers la VM). Le service tourne sous l'utilisateur `freebox` de
+la VM, qui a les droits d'administrateur sans mot de passe (réglage de l'image Debian de la
+Freebox) : une faille dans la page donnerait donc la main sur toute la VM.
+
+### Alertes par SMS (abonnés Free Mobile)
+
+Un SMS arrive sur votre téléphone si un enregistrement échoue ou présente des trous, si une
+conversion en MKV échoue, ou s'il reste moins de 10 Go libres sur le disque de la Freebox.
+Aucune application à installer : le SMS passe par le service de Free Mobile, vers votre
+propre numéro.
+
+1. Dans votre espace abonné Free Mobile, menu « Mes options », activez **Notifications par
+   SMS**. Free affiche un identifiant (8 chiffres) et une clé.
+2. Dans **Paramètres > Alertes par SMS**, recopiez-les puis cliquez sur « Enregistrer et
+   envoyer un test ». Ils ne sont enregistrés que si le SMS de test part.
+
+Au plus 10 alertes par 24 heures. Le même endroit permet de renvoyer un test ou de désactiver
+les alertes.
 
 ### Mise à jour
 
@@ -222,8 +260,15 @@ montrer sans risque. L'autre fichier, `id_ed25519` sans extension, ne se donne j
   Freebox est inconnue.
 - Qualité : on choisit SD, HD ou automatique pour chaque programmation. Seule la piste
   audio française est gardée (pas l'audiodescription ni la VO, pas de sous-titres).
-- L'heure de fin des émissions n'est pas connue du programme (pas de guide TV) : prévoyez
-  une marge.
+- Les horaires du guide TV sont ceux annoncés par les chaînes, souvent décalés de quelques
+  minutes : gardez une marge avant et après.
+- Format des fichiers : l'enregistrement se fait en MPEG-TS (.ts), qui résiste aux coupures.
+  Quelques minutes après la fin, quand aucun enregistrement n'est en cours ni prévu dans les
+  20 minutes, le fichier est converti en MKV (.mkv), lisible par les lecteurs courants (Windows,
+  « Lecteur vidéo » d'Ubuntu, VLC) et directement dans la page. La vidéo n'est pas réencodée :
+  l'image est entrelacée, des effets de peigne peuvent se voir sur les mouvements rapides.
+  Le .ts n'est supprimé qu'une fois le .mkv vérifié (même durée). Pour garder les .ts, ajouter
+  `FBXREC_CONVERT=0` dans `/etc/fbxrec.env`.
 
 ## Désinstallation
 

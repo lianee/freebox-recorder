@@ -28,47 +28,71 @@ def safe_dirname(name):
 
 
 class Recording(threading.Thread):
-    def __init__(self, occ, out_root, results_path, now=lambda: datetime.now(TZ)):
+    def __init__(self, occ, out_root, results_path, now=lambda: datetime.now(TZ), on_done=None):
         super().__init__(daemon=True, name=f"rec-{occ.key}")
-        self.occ, self.now = occ, now
+        self.occ, self.now, self.on_done = occ, now, on_done
+        self.end = occ.end   # may move while recording (set_end), the capture loop stops ffmpeg there
         self.dir = os.path.join(out_root, safe_dirname(occ.name))
         stamp = occ.show_start.strftime("%Y-%m-%d %Hh%M")
         # the folder already carries the show name: the file gets date first (sorts by date) + channel.
         # A few playlist names contain "/" (e.g. "TeleBom/TeleDom"): shown as "-" in the file name.
         label = f"{stamp} - {occ.channel.replace('/', '-')}"
-        self.base = os.path.join(self.dir, label)
+        self.label, self.base = label, os.path.join(self.dir, label)
         # restarted mid-slot (daemon or VM reboot): never overwrite the first part
-        i = 2
+        self.next_i = 2
         while os.path.exists(self.base + ".ts") or os.path.exists(self.base + ".part0.ts"):
-            self.base = os.path.join(self.dir, f"{label} ({i})")
-            i += 1
+            self._bump()
         self.results_path = results_path
         self.proc = None
         self.stopped = threading.Event()
-        self.info = {"key": occ.key, "name": occ.name, "show_start": occ.show_start.isoformat(),
+        self.info = {"key": occ.key, "name": occ.name, "channel": occ.channel, "service": occ.service, "show_start": occ.show_start.isoformat(),
                      "start": occ.start.isoformat(), "end": occ.end.isoformat(),
                      "segments": 0, "reconnects": 0, "stalls": 0, "missed": 0, "corrupt": 0,
                      "audio": "fra", "state": "recording"}
+
+    def _bump(self):
+        self.base = os.path.join(self.dir, f"{self.label} ({self.next_i})")
+        self.next_i += 1
+
+    def _reserve(self):
+        """Claim the first part atomically: two recordings of the same channel started in the
+        same second got the same name and both ffmpeg wrote one file (2026-10-20)."""
+        while True:
+            if not os.path.exists(self.base + ".ts"):
+                try:
+                    os.close(os.open(self.base + ".part0.ts", os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+                    return
+                except FileExistsError:
+                    pass
+            self._bump()
+
+    def set_end(self, end):
+        self.end = end
+        self.info["end"] = end.isoformat()
 
     def stop(self):
         self.stopped.set()
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
 
-    def _capture(self, part, seconds, audio_map):
+    def _capture(self, part, audio_map):
         cmd = [FFMPEG, "-nostdin", "-v", "warning", "-rtsp_transport", "udp",
                "-i", URL.format(service=self.occ.service, flavour=self.occ.flavour),
-               "-map", "0:v:0", "-map", audio_map, "-t", f"{seconds:.0f}", "-c", "copy",
+               "-map", "0:v:0", "-map", audio_map, "-c", "copy",
                "-f", "mpegts", "-y", part]
         self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
                                      errors="replace")
+        # no -t: the end can move while recording, so this loop ends the capture itself
         size, grown, err = -1, time.monotonic(), ""
         while True:
+            remaining = (self.end - self.now()).total_seconds()
             try:
-                _, err = self.proc.communicate(timeout=min(5, STALL_TIMEOUT / 2))
+                _, err = self.proc.communicate(timeout=max(0.2, min(5, STALL_TIMEOUT / 2, remaining)))
                 break
             except subprocess.TimeoutExpired:   # retrying communicate() loses no output
                 pass
+            if (self.end - self.now()).total_seconds() <= 0:
+                self.proc.terminate()   # repeated each turn; a hung ffmpeg is killed by the watchdog below
             cur = os.path.getsize(part) if os.path.exists(part) else 0
             if cur != size:
                 size, grown = cur, time.monotonic()
@@ -80,16 +104,17 @@ class Recording(threading.Thread):
 
     def run(self):
         os.makedirs(self.dir, exist_ok=True)
+        self._reserve()
         parts, audio_map, n, retry = [], "0:a:m:language:fra", 0, False
         while not self.stopped.is_set():
-            remaining = (self.occ.end - self.now()).total_seconds()
-            if remaining < 2:
+            if (self.end - self.now()).total_seconds() < 2:
                 break
             if retry:   # counted only once the new capture really starts: the slot may end during the delay
                 self.info["reconnects"] += 1
                 retry = False
             part = f"{self.base}.part{n}.ts"
-            rc, err = self._capture(part, remaining, audio_map)
+            self.info["part"] = part   # the player may read the capture in progress
+            rc, err = self._capture(part, audio_map)
             self.info["missed"] += sum(int(x) for x in re.findall(r"missed (\d+) packets", err))
             self.info["corrupt"] += len(re.findall(r"orrupt", err))
             if "matches no streams" in err and audio_map.endswith("fra"):
@@ -102,11 +127,15 @@ class Recording(threading.Thread):
                 n += 1
             if self.stopped.is_set():
                 break
-            if (self.occ.end - self.now()).total_seconds() >= 2:
+            if (self.end - self.now()).total_seconds() >= 2:
                 retry = True
                 log.warning("%s: ffmpeg exited early (rc=%s): %s", self.occ.key, rc,
                             err.strip().splitlines()[-1:] or "")
                 time.sleep(RETRY_DELAY)
+        p0 = f"{self.base}.part0.ts"   # reserved by _reserve: do not leave it empty after a failure
+        if not parts and os.path.exists(p0) and not os.path.getsize(p0):
+            os.remove(p0)
+        self.info.pop("part", None)
         self.info["segments"] = len(parts)
         self.info["file"] = self._assemble(parts)
         self.info["state"] = "stopped" if self.stopped.is_set() else "done"
@@ -119,6 +148,8 @@ class Recording(threading.Thread):
         with open(self.results_path, "a") as f:
             f.write(json.dumps(self.info, ensure_ascii=False) + "\n")
         log.info("%s: %s", self.occ.key, self.info)
+        if self.on_done:
+            self.on_done(self.info)
 
     def _assemble(self, parts):
         final = f"{self.base}.ts"

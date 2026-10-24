@@ -31,7 +31,7 @@ def validate(d):
     if not isinstance(d, dict):
         raise ValidationError("schedule must be an object")
     allowed = {"id", "name", "service", "channel", "flavour", "kind", "days", "date",
-               "start", "end", "margin_before", "margin_after", "enabled"}
+               "start", "end", "margin_before", "margin_after", "enabled", "follow_guide", "guide_title"}
     extra = set(d) - allowed
     if extra:
         raise ValidationError(f"unknown fields: {', '.join(sorted(extra))}")
@@ -77,6 +77,16 @@ def validate(d):
         if not 0 <= s[k] <= 60:
             raise ValidationError(f"{k}: 0 to 60 minutes")
     s["enabled"] = _req(d, "enabled", bool)
+    # follow the TV guide: times taken from the programme of this title (app.py), fixed ones as fallback
+    s["follow_guide"] = d.get("follow_guide", False)
+    if not isinstance(s["follow_guide"], bool):
+        raise ValidationError("field follow_guide must be bool")
+    title = d.get("guide_title", "")
+    if not isinstance(title, str) or len(title) > 200 or re.search(r"[\x00-\x1f\x7f]", title):
+        raise ValidationError("guide_title: up to 200 printable characters")
+    s["guide_title"] = title.strip()
+    if s["follow_guide"] and not s["guide_title"]:
+        raise ValidationError("guide_title required to follow the guide")
     s["id"] = d.get("id") or uuid.uuid4().hex[:12]
     if not isinstance(s["id"], str) or not re.match(r"^[0-9a-f]{12}$", s["id"]):
         raise ValidationError("bad id")
@@ -93,6 +103,7 @@ class Occurrence:
     end: datetime     # UTC, margin included
     show_start: datetime
     channel: str
+    guided: bool = False   # start/end taken from the TV guide (app.Daemon.adjust)
 
     @property
     def key(self):

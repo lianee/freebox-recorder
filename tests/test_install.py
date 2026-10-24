@@ -103,15 +103,36 @@ exit 32
         self.assertEqual(self.sh("mount_point_for 'Disque dur'")[1], "/mnt/disque-dur")
         self.assertEqual(self.sh("fstab_escape '//h/Disque dur'")[1], r"//h/Disque\040dur")
 
+    def busy_curl(self, busy_body, busy_code=200, running="[]"):
+        """Fake curl: /api/busy answers busy_body with busy_code (-w adds the code), /api/running `running`."""
+        self.fake("curl", f"""for a in "$@"; do u="$a"; done
+case "$u" in
+  */api/busy*) printf '%s\\n%s' '{busy_body}' '{busy_code}' ;;
+  */api/running) echo '{running}' ;;
+esac
+""")
+
     def test_guard(self):
         self.fake("systemctl", "exit 0\n")   # service active
-        self.fake("curl", "echo '[]'\n")
+        self.busy_curl('{"busy": null}')
         self.assertEqual(self.sh("guard_idle && echo free")[:2], (0, "free\n"))
-        self.fake("curl", "echo '[{\"key\": \"x\"}]'\n")
+        self.busy_curl('{"busy": "enregistrement en cours, réessayez après"}')
         rc, _, err = self.sh("guard_idle")
         self.assertNotEqual(rc, 0)
         self.assertIn("enregistrement en cours", err)
+        self.busy_curl('{"busy": "un enregistrement commence dans moins de 10 minutes (NOPLP)"}')
+        rc, _, err = self.sh("guard_idle")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("NOPLP", err)                          # one starting soon refuses too
         self.assertEqual(self.sh("FORCE=1 guard_idle && echo forced")[1], "forced\n")
+        self.busy_curl("x", 404, "[]")                       # service older than /api/busy
+        self.assertEqual(self.sh("guard_idle && echo free")[1], "free\n")
+        self.busy_curl("x", 404, '[{"key": "x"}]')
+        self.assertNotEqual(self.sh("guard_idle")[0], 0)
+        self.busy_curl("not json")                           # unreadable: assume busy
+        self.assertNotEqual(self.sh("guard_idle")[0], 0)
+        self.busy_curl("x", 500)
+        self.assertNotEqual(self.sh("guard_idle")[0], 0)
         self.fake("curl", "exit 7\n")        # active but not answering: assume busy
         self.assertNotEqual(self.sh("guard_idle")[0], 0)
         self.fake("systemctl", "exit 3\n")   # service stopped: nothing to cut
@@ -155,7 +176,54 @@ exit 32
 
     def test_messages_show_elapsed_time(self):
         rc, _, err = self.sh(f'FBXREC_T0=$(( $(date +%s) - 125 )); say hello')
-        self.assertEqual(err.strip(), "fbxrec [2:05]: hello")
+        # the second may tick between the two `date` calls on a loaded machine (seen 2026-10-20: 2:06)
+        self.assertIn(err.strip(), ("fbxrec [2:05]: hello", "fbxrec [2:06]: hello"))
+
+    def test_port_80_when_free(self):
+        env = os.path.join(self.tmp.name, "fbxrec.env")
+        self.fake("ss", "exit 0\n")                           # nothing listens
+        rc, _, err = self.sh(f'ENV_FILE="{env}" FBXREC_OUT=/mnt/x write_config')
+        self.assertEqual(rc, 0, err)
+        with open(env) as f:
+            self.assertIn("FBXREC_PORT=80\n", f.read())
+        self.assertEqual(self.sh("web_url 192.168.1.22 80")[1], "http://192.168.1.22/")
+        self.assertEqual(self.sh("web_url 192.168.1.22 8080")[1], "http://192.168.1.22:8080/")
+
+    def test_port_8080_when_80_is_taken(self):
+        env = os.path.join(self.tmp.name, "fbxrec.env")
+        self.fake("ss", 'echo "LISTEN 0 511 0.0.0.0:80 0.0.0.0:*"\n')   # a web server already there
+        rc, _, err = self.sh(f'ENV_FILE="{env}" FBXREC_OUT=/mnt/x write_config')
+        with open(env) as f:
+            self.assertIn("FBXREC_PORT=8080\n", f.read())
+        self.assertIn("port 80 déjà utilisé", err)
+        self.fake("ss", "exit 0\n")                           # an existing configuration keeps its port
+        self.sh(f'ENV_FILE="{env}" FBXREC_OUT=/mnt/x write_config')
+        with open(env) as f:
+            self.assertIn("FBXREC_PORT=8080\n", f.read())
+
+    def test_port_asked(self):
+        env = os.path.join(self.tmp.name, "fbxrec.env")
+        self.fake("ss", "exit 0\n")
+        rc, _, err = self.sh(f'ENV_FILE="{env}" FBXREC_OUT=/mnt/x FBXREC_PORT=8090 write_config')
+        self.assertEqual(rc, 0, err)
+        with open(env) as f:
+            self.assertIn("FBXREC_PORT=8090\n", f.read())
+        rc, _, err = self.sh(f'ENV_FILE="{env}" FBXREC_PORT=81 write_config')   # existing install: changed
+        self.assertEqual(rc, 0, err)
+        with open(env) as f:
+            conf = f.read()
+        self.assertIn("FBXREC_PORT=81\n", conf)
+        self.assertNotIn("8090", conf)
+        self.assertIn("changé", err)
+        for bad in ("http", "0", "70000", "80 81", "-1"):
+            rc, _, err = self.sh(f'ENV_FILE="{env}" FBXREC_PORT="{bad}" write_config')
+            self.assertNotEqual(rc, 0, bad)
+        self.fake("ss", 'echo "LISTEN 0 511 0.0.0.0:82 0.0.0.0:*"\n')
+        rc, _, err = self.sh(f'ENV_FILE="{env}" FBXREC_PORT=82 write_config')
+        self.assertNotEqual(rc, 0)
+        self.assertIn("déjà utilisé", err)
+        with open(env) as f:
+            self.assertIn("FBXREC_PORT=81\n", f.read())               # unchanged by the refusals
 
     def test_branch_source(self):
         dest = os.path.join(self.tmp.name, "dest")
