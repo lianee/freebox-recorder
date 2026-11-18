@@ -406,7 +406,7 @@ async function refresh() {
     : `<tr><td class="muted">Rien de prévu dans les 7 jours.</td></tr>`);
   setTable("t-results", res.length ? "<tr><th>Dossier</th><th>Chaîne</th><th>Émission</th><th>État</th><th>Taille</th><th>Pertes</th><th></th></tr>" + res.map(r => {
     const bad = r.state !== "done" || r.gaps || r.reconnects || r.missed;
-    const loss = r.gaps == null ? "non mesuré" : (r.gaps ? `${r.gaps} trous, ${r.missing_s} s` : "aucune") + (r.reconnects ? `, ${r.reconnects} coupure(s)` : "");
+    const loss = r.gaps == null ? "non mesuré" : (r.gaps ? `${r.gaps} trous, ${r.missing_s} s` : "aucune") + (r.reconnects && r.gaps !== 0 ? `, ${r.reconnects} coupure(s)` : "");
     const st = r.deleted ? "supprimé" : {done: "terminé", stopped: "arrêté", failed: "échec"}[r.state] || r.state;
     const rel = !r.deleted && relPath(r.file);
     return `<tr class="${r.deleted ? "muted" : ""}">${td("Dossier", esc(r.name))}${td("Chaîne", r.channel ? logo(r.service || (channels.find(c => c.name === r.channel) || {}).service) + esc(r.channel) : "")}${td("Émission", fmt(r.show_start))}

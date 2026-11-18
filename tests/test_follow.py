@@ -86,6 +86,19 @@ class Find(unittest.TestCase):
         write_hours(self.tmp.name, [(morning + 3 * 3600, 2100, TITLE), (at - 3 * 3600, 2100, TITLE)], self.now)
         self.assertEqual(self.g.find(201, TITLE, at), (at - 3 * 3600, at - 3 * 3600 + 2100))   # closest to usual
 
+    def test_closest_showing_wins_within_the_window(self):
+        # 2026-11-07: the 21:10 prime was matched to the 19:10 part of the daily show, exactly 2 h before
+        at, morning = self.evening()
+        prime = at + 9300   # 21:10
+        write_hours(self.tmp.name, [(at, 2100, TITLE), (at + 2100, 2700, TITLE), (prime, 8100, TITLE)], self.now)
+        self.assertEqual(self.g.find(201, TITLE, prime), (prime, prime + 8100))
+        self.assertEqual(self.g.find(201, TITLE, at), (at, at + 4800))   # the daily show keeps its 2 parts
+
+    def test_part_before_the_closest_one_kept(self):
+        at, morning = self.evening()
+        write_hours(self.tmp.name, [(at - 2700, 2400, TITLE), (at, 2700, TITLE)], self.now)   # 17:50, 18:35
+        self.assertEqual(self.g.find(201, TITLE, at), (at - 2700, at + 2700))
+
     def test_night_not_loaded_keeps_fixed(self):
         at, morning = self.evening()
         os.remove(os.path.join(self.tmp.name, f"{(at + 5 * 3600) - (at + 5 * 3600) % 3600}.json"))

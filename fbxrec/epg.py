@@ -23,6 +23,7 @@ REFRESH_SOON_S = 3 * 3600  # ...or after this when it starts within 6 h
 MEM_HOURS = 24             # parsed hours kept in memory
 FIND_WINDOW_S = 2 * 3600   # a followed show may start this far from its fixed time
 MERGE_GAP_S = 600          # consecutive parts of one show separated by at most this are merged
+PART_MAX_S = 4 * 3600      # hours looked back for the part before a showing
 FOUND_CACHE_S = 600
 DESC_MAX = 400
 PICTURE_RE = re.compile(r"^/api/[\w./-]{1,200}\.(jpg|jpeg|png)$")
@@ -146,7 +147,8 @@ class Guide:
 
     def find(self, service, title, around, window=FIND_WINDOW_S, gap=MERGE_GAP_S):
         """(start, end) of the programme `title` on `service`, consecutive parts of the same title
-        (gap <= `gap`) merged. Looked for within `window` of `around` first; else later that
+        (gap <= `gap`) merged. Looked for within `window` of `around` first, the closest showing
+        (a prime and the daily show of the same title can share that window); else later that
         evening and night until 06:00 next morning (a show moved for a match, say), else earlier
         that day from 06:00 (later first: a morning slot is more likely a rerun). None when not
         found or when the guide is not loaded there (the caller keeps its fixed times)."""
@@ -170,14 +172,14 @@ class Guide:
             progs.update(p.get(service, {}))
             return True
 
-        def first_in(lo, hi, latest_first=False):
-            """First showing starting in [lo, hi], or None; False if the guide lacks an hour there."""
+        def pick(lo, hi, rank):
+            """Showing starting in [lo, hi] with the lowest `rank`, or None; False if the guide lacks an hour there."""
             if not all(load(t) for t in range(lo, hi + 1, 3600)) or not load(hi):
                 return False
             hits = [p for p in progs.values() if norm(p["title"]) == want and lo <= p["start"] <= hi]
             if not hits:
                 return None
-            return (max if latest_first else min)(hits, key=lambda p: p["start"])
+            return min(hits, key=rank)
 
         local = datetime.fromtimestamp(around, TZ)
         morning = local.replace(hour=6, minute=0, second=0, microsecond=0)
@@ -185,15 +187,23 @@ class Guide:
             morning -= timedelta(days=1)
         day_start = int(morning.timestamp())
         night_end = int((morning + timedelta(days=1)).timestamp())
-        first = first_in(around - window, around + window)
+        first = pick(around - window, around + window, lambda p: abs(p["start"] - around))
         if first is None:
-            first = first_in(around + window + 1, night_end)
+            first = pick(around + window + 1, night_end, lambda p: p["start"])
         if first is None:
             # earlier that day: the closest to the usual time
-            first = first_in(day_start, around - window - 1, latest_first=True)
+            first = pick(day_start, around - window - 1, lambda p: -p["start"])
         result = None
         if first:
             start, end = first["start"], first["start"] + first["duration"]
+            while True:   # earlier parts: the closest showing may be a second part
+                for ts in range(start - PART_MAX_S, start, 3600):
+                    load(ts)
+                prev = [p["start"] for p in progs.values() if norm(p["title"]) == want and p["start"] < start
+                        and start - gap <= p["start"] + p["duration"] <= start + 60]
+                if not prev:
+                    break
+                start = min(prev)
             while True:   # following parts, loading later hours as needed
                 load(end + gap)
                 nxt = [p for p in sorted(progs.values(), key=lambda p: p["start"])
