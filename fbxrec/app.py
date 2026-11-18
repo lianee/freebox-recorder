@@ -111,7 +111,8 @@ def alert_text(info):
     bad = []
     if info.get("gaps"):
         bad.append(f"{info['gaps']} trou(s) dans l'image ({info.get('missing_s', 0)} s)")
-    if info.get("reconnects"):
+    # a reconnect with no image missing (gaps measured at 0) is harmless: not worth a question
+    if info.get("reconnects") and info.get("gaps") != 0:
         bad.append(f"{info['reconnects']} coupure(s) du flux")
     if info.get("stalls"):
         bad.append(f"{info['stalls']} blocage(s) du disque")

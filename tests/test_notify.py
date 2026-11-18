@@ -114,6 +114,9 @@ class AlertText(unittest.TestCase):
         t = app.alert_text(dict(self.base, state="done", gaps=3, missing_s=12, reconnects=1))
         self.assertEqual(t, "Enregistreur TV : « NOPLP » du 20/10 18h40 (France 2) : 3 trou(s) dans l'image (12 s), 1 coupure(s) du flux.")
         self.assertIsNone(app.alert_text(dict(self.base, state="done", gaps=0, reconnects=0, stalls=0)))
+        # reconnect with no image missing (5/11 NOPLP): no SMS; not measured: still reported
+        self.assertIsNone(app.alert_text(dict(self.base, state="done", gaps=0, missing_s=0, reconnects=1, stalls=0)))
+        self.assertIn("1 coupure(s)", app.alert_text(dict(self.base, state="done", gaps=None, reconnects=1)))
         self.assertIsNone(app.alert_text(dict(self.base, state="stopped", gaps=None)))
 
 
